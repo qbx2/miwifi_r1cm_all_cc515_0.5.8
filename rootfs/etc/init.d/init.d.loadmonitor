@@ -1,0 +1,27 @@
+#!/bin/sh /etc/rc.common
+
+START=95
+STOP=45
+
+start() {
+	#running in background
+	#
+	if [ -x /usr/sbin/loadmonitor.sh ]
+		then
+		/usr/sbin/loadmonitor.sh start
+		return $?
+	fi
+	#
+	return 0
+}
+
+stop() {
+	#
+	if [ -x /usr/sbin/loadmonitor.sh ]
+		then
+		/usr/sbin/loadmonitor.sh stop
+		return $?
+	fi
+	#
+	return 0
+}

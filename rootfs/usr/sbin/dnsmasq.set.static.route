@@ -1,0 +1,197 @@
+#!/bin/sh
+#
+. /lib/lib.scripthelper.sh
+#
+. /lib/lib.wan.monitor.sh
+#
+#
+checkproclock 30
+if [ $? -ne 0 ]
+	then
+	echo "INFO: exit for another running, PID: $(getlockedprocpid)"
+	exit 0
+fi
+setproclock "$$"
+#
+TUNNAME='localdnstun'
+#
+CONFIGFILE="/var/etc/dnsmasq.conf"
+#
+#TODO: move /tmp/traffic.route.env into $MONITORCFGFILE
+#
+if [ ! -s "$MONITORCFGFILE" ]
+then
+	dlog "WARNING: no exist or empty: $MONITORCFGFILE"
+	exit 0
+fi
+. $MONITORCFGFILE
+if [ -z "$MONITORFILE" ]
+	then
+	dlog "WARNING: MONITORFILE no defined in $MONITORCFGFILE"
+	exit 0
+fi
+if [ -z "$VPNALIVE" ]
+	then
+	dlog "WARNING: VPNALIVE no defined in $MONITORCFGFILE"
+	exit 0
+fi
+if [ -s /tmp/traffic.route.env ]
+	then
+	. /tmp/traffic.route.env
+fi
+if [ -z "$SECUREDNSLIST" ]
+	then
+	dlog "WARNING: SECUREDNSLIST no defined in $MONITORCFGFILE or /tmp/traffic.route.env"
+fi
+export VPNGW SECUREDNSLIST
+#
+syncsecurednstoconf(){
+	local onesrvline listline onestr domainlist srvip newsrvline srvport issame firstdns exitcode
+	if [ ! -s /etc/dnsmasq.securedomain.list ]
+		then
+		return 0
+	fi
+	if [ ! -s "$CONFIGFILE" ]
+		then
+		return 0
+	fi
+	exitcode=0
+	firstdns=''
+	for oneupstreamdns in $SECUREDNSLIST
+	do
+		firstdns="$oneupstreamdns"
+		break
+	done
+	securecnt=0
+	local FQDN
+	while read onesrvline
+	do
+		test -z "$onesrvline" && continue
+		stringmatchstart '#' $onesrvline && continue
+		FQDN=''
+		UPDNS=''
+		eval "$onesrvline"
+		if [ -z "$FQDN" ]
+			then
+			dlog "WARNING: unknow FQDN of $onesrvline"
+			continue
+		fi
+		if [ -z "$UPDNS" ]
+			then
+			if [ -n "${firstdns}" ]
+				then
+				UPDNS="${firstdns}"
+			else
+				#skipped SECUREDNSLIST
+				continue
+			fi
+		fi
+		#server=/google.com/172.18.8.8
+		#CONFIGFILE
+		cat $CONFIGFILE | grep -q "^server=/${FQDN}/${UPDNS}"
+		if [ $? -eq 0 ]
+			then
+			#already exist
+			continue
+		fi
+		cat $CONFIGFILE | grep -q "^server=/${FQDN}/"
+		if [ $? -eq 0 ]
+			then
+			#update old upstream
+			sed -i -e "s#^server=/${FQDN}/.*#server=/${FQDN}/${UPDNS}#g" $CONFIGFILE
+			if [ $? -ne 0 ]
+				then
+				dlog "ERROR: set server=/${FQDN}/$UPDNS to $CONFIGFILE failed."
+				return 1
+			fi
+		else
+			echo "server=/${FQDN}/${UPDNS}" >> $CONFIGFILE
+			if [ $? -ne 0 ]
+				then
+				dlog "ERROR: set server=/${FQDN}/$UPDNS to $CONFIGFILE failed."
+				return 1
+			fi
+		fi
+		let securecnt=$securecnt+1
+	done < /etc/dnsmasq.securedomain.list
+	if [ $securecnt -gt 0 ]
+	then
+		dlog "INFO: $securecnt secure domain updated: $CONFIGFILE"
+	fi
+	return $exitcode
+}
+#using SECUREDNSLIST 172.18.8.8, 172.18.9.9
+setdnsmasqroute(){
+	local ctlop vpniswork
+	ctlop="$1"
+	if [ ! -s /etc/dnsmasq.securedomain.list ]
+		then
+		return 0
+	fi
+	#
+	#check vpn status and setup route for upstream dns
+	#
+	#
+	#dlog "DEBUG: secure upstream dns servers: ${SECUREDNSLIST}"
+	#
+	if [ "$ctlop" = 'stop' ]
+		then
+		tunctl -d $TUNNAME >/dev/null 2>&1
+		tunctl -t $TUNNAME >/dev/null 2>&1
+		if [ $? -ne 0 ]
+			then
+			dlog "ERROR: create TUN device $TUNNAME failed: $(tunctl -t $TUNNAME 2>&1)"
+			return 1
+		fi
+		ifconfig $TUNNAME up
+		#test "$2" != 'mute' && dlog "INFO: block secure dns $SECUREDNSLIST for server stopping."
+		for oneupstreamdns in $SECUREDNSLIST
+		do
+			delroute "-host $oneupstreamdns"
+			#Aug 20 22:28:09 dnsmasq[8229]: ignoring nameserver 172.18.8.8 - $TUNNAMEcal interface
+			ipaddradd ${oneupstreamdns}/32 $TUNNAME 2>/dev/null
+		done
+		return 0
+	fi
+	#
+	islinkup vpn
+	vpniswork=$?
+	#0 for down
+	if [ $vpniswork -ne 0 ]
+		then
+		if [ -n "$VPNGW" ]
+			then
+			dlog "INFO: allow secure dns for vpn is up."
+			tunctl -d $TUNNAME >/dev/null 2>&1
+			if [ $? -ne 0 ]
+			then
+				dlog "ERROR: delete TUN device $TUNNAME failed: $(tunctl -d $TUNNAME 2>&1)"
+				return 1
+			fi
+			for oneupstreamdns in $SECUREDNSLIST
+			do
+				addroute "-host $oneupstreamdns gw $VPNGW"
+			done
+		else
+			dlog "INFO: block secure dns $SECUREDNSLIST for vpn is up but vpn gateway no found."
+			setdnsmasqroute stop mute
+		fi
+	else
+		#dlog "INFO: block secure dns $SECUREDNSLIST for vpn is down."
+		setdnsmasqroute stop mute
+	fi
+	if [ $? -ne 0 ]
+		then
+		setdnsmasqroute stop mute
+		return 1
+	fi
+	return 0
+}
+#apple fqdn
+if [ "$1" != "stop" ];then
+    syncsecurednstoconf
+fi
+# cancel tunnel  virtual device
+#setdnsmasqroute $@
+exit $?
+#

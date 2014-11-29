@@ -1,0 +1,24 @@
+#!/bin/sh /etc/rc.common
+
+START=91
+STOP=91
+
+start() {
+    #check if QoS is ON, will not to start hwnat
+	f_qos=`uci get miqos.settings.enabled 2>/dev/null`
+	if [ -n $f_qos -a "$f_qos" -eq "1" ]; then
+		echo "Qos enabled to disable hw_nat!"
+		return 0
+	fi
+	echo "inserting hw_nat.ko!"
+	insmod /lib/modules/2.6.36/hw_nat.ko
+	echo "create /dev/hwnat0"
+	mknod /dev/hwnat0 c 220 0
+}
+
+stop() {
+	echo "removing hw_nat.ko"
+	rmmod hw_nat.ko
+}
+
+

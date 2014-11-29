@@ -1,0 +1,92 @@
+#!/bin/sh
+# Copyright (C) 2006-2010 OpenWrt.org
+# Copyright (C) 2010 Vertical Communications
+
+do_mount_bind_etc() {
+	# for: 1, ota; 2, format disk; 3, downgrade
+	# we should rsync /etc files to /data/etc
+
+        flag_name=`uci get misc.mount_bind_etc.flag_name`
+        use_rsync=`uci get misc.mount_bind_etc.has_rsync`
+        sync_etc=`uci get misc.mount_bind_etc.sync_etc`
+        do_fac_mode=`uci get misc.mount_bind_etc.do_fac_mode`
+
+	post_ota=0
+	mkdir -p /data/etc
+	flg_ota=`nvram get flag_ota_reboot`
+	flg_rec=`nvram get flag_recover_config`
+	if [ "$flg_ota" = "1" -o "$flg_rec" = "1" -o ! -f /etc/remove.conf ]; then
+		/usr/sbin/config_pre_ota.sh
+		if [ ! -f /etc/remove.conf ]
+		then
+			echo " ************* WARNING *******************"
+			echo " ***** /rom/etc/remove.conf no exist and try to rsync files ****"
+		else
+			echo " *****ota: remove files in /etc/remove.conf *****"
+		fi
+		cat /etc/remove.conf 2>/dev/null | while read line
+		do
+			rm -rfv $line
+		done
+
+		if [ "$use_rsync" = "1" ]; then
+			rsync -ac --ignore-existing /etc/ /data/etc
+
+			if [ -d /plugins ] ; then
+				rsync -ac /plugins/* /userdisk
+			fi
+		else
+			echo N | cp -ri /etc/* /data/etc 2>/dev/null
+		fi
+
+		sync
+		post_ota=1
+	fi
+
+	flg_format=`nvram get $flag_name`
+	if [ "$flg_format" = "1" -o "$sync_etc" = "1" ]; then
+		if [ "$use_rsync" = "1" ]; then
+			rsync -ac --ignore-existing /etc/ /data/etc
+		else
+			echo N | cp -ri /etc/* /data/etc 2>/dev/null
+		fi
+
+                sync
+                nvram unset $flag_name
+                nvram commit
+	fi
+
+
+
+	[ "$do_fac_mode" = "1" ] && {
+		# factory mode
+		flg_fac=`cat /proc/xiaoqiang/ft_mode`
+                if [ "$flg_fac" = "1" ]; then
+                        echo N | cp -ri /etc/* /data/etc 2>/dev/null
+                        sync
+                fi
+	}
+
+	#replace files that size 0 in /data/etc
+	cd /data/etc
+	find . -size 0 | while read line
+	do
+		if [ -s /etc/$line -a -f /etc/$line ]; then
+			#jffs2 directory's size is zero,file is not damaged
+			echo "/etc damaged, recovering /etc/$line"
+			cp -arf /etc/$line /data/etc/$line
+			sync
+		fi
+	done
+	cd /
+
+	mount --bind /data/etc /etc
+
+	if [ "$post_ota" = "1" ]
+		then
+		/usr/sbin/config_post_ota.sh
+	fi
+}
+
+boot_hook_add preinit_main do_mount_bind_etc
+

@@ -1,0 +1,20 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2006-2011 OpenWrt.org
+
+START=18
+
+start() {
+        wl0_radio_sw=`nvram get wl0_radio`
+        if [ "$wl0_radio_sw" = "0" ]; then
+		uci set wireless.mt7612.disabled=1
+		uci commit wireless
+        fi
+
+        wl1_radio_sw=`nvram get wl1_radio`
+        if [ "$wl1_radio_sw" = "0" ]; then
+		uci set wireless.mt7620.disabled=1
+		uci commit wireless
+        fi
+
+}
+

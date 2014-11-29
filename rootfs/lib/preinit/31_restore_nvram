@@ -1,0 +1,52 @@
+#!/bin/sh
+
+. /lib/functions.sh
+
+restore_nvram () {
+	restore=`nvram get restore_defaults`
+	if [ "$restore" = "1" ]; then
+		nvram set flag_format_overlay=1
+	fi
+	wl0_ssid=`nvram get wl0_ssid`
+	if [ -z "$wl0_ssid" ]; then
+		nvram_corrupt=1
+	fi
+
+	flag=`bdata show`
+	if [ -z "$flag" ]; then
+		nvrampart="$(find_mtd_part Config)"
+		bdatapart="$(find_mtd_part Bdata)"
+		if [ -n "$nvrampart" -a -n "$bdatapart" ]; then
+			dd if=$nvrampart of=$bdatapart bs=1 skip=8192 count=16384
+		fi
+		bdata reload
+		flag=`bdata show`
+		if [ -z "$flag" ]; then
+			bdata set model=R1CM
+			bdata commit
+		fi
+	fi
+
+	#restore: 1, 恢复出厂设置；2，ota升级
+	#nvram_corrupt: 1, nvram被破坏
+	if [ -s /usr/share/xiaoqiang/xiaoqiang-defaults.txt ]; then
+		if [ "$restore" = "1" ] || [ "$restore" = "2" ] || [ "$nvram_corrupt" = "1"  ]; then
+			if [ "$restore" = "1" ]; then
+				nvram clear /usr/share/xiaoqiang/xiaoqiang-reserved.txt
+			fi
+
+			cat /usr/share/xiaoqiang/xiaoqiang-defaults.txt | while read line
+			do
+			        nvram set "$line"
+			done
+
+			bdata sync
+			bdata commit
+			nvram commit
+
+			echo "nvram restore done."
+		fi
+	fi
+}
+
+boot_hook_add preinit_main restore_nvram

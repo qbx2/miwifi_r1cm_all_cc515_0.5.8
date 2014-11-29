@@ -1,0 +1,60 @@
+#!/bin/sh
+
+. /lib/functions/network.sh
+LAST_FIX='/tmp/state/wan_last_fix'
+network_get_device l3dev wan
+network_get_physdev dev wan
+
+save_record() {
+    echo "$1" > "$LAST_FIX"
+}
+
+fix_gateway() {
+    if [ "$l3dev" == 'pppoe-wan' ]; then # gently shutdown pppd, netifd will bring it up
+	kill -1 `pidof pppd`
+    else
+	kill -1 `pidof udhcpc`
+    fi
+    exit 0
+}
+
+fix_dns() {
+    save_record "dns"
+    /etc/init.d/dnsmasq restart
+    exit 0
+}
+
+# check gateway
+lastfix="none"
+[ -e "$LAST_FIX" ] && lastfix=$(cat $LAST_FIX)
+network_get_gateway gw wan
+[ -z $gw ] && save_record none && exit 1
+if [ "$l3dev" == "$dev" ]; then
+    arping -f -q -c 3 -w 2 -I "$dev" "$gw"
+else
+    # skip pppoe
+    exit 0
+fi
+
+[ $? -ne 0 ] && [ $lastfix == "none" ] && fix_gateway
+
+[ -f "/lib/xq-misc/fcgi_wdog.sh" ] && {
+    . /lib/xq-misc/fcgi_wdog.sh
+    network_get_ipaddr lanip lan
+    check_fcgi $lanip
+}
+
+# TODO: replace dnsmonitor with this
+exit 0
+
+# dns resolve
+dnscheck=0
+TESTHOST="www.baidu.com www.mi.com www.taobao.com"
+for th in $TESTHOST; do
+    nslookup $th
+    [ $? -eq 0 ] && dnscheck=1 && break
+done
+
+[ $dnscheck -eq 0 ] && [ $last_fix == "none" ] && fix_dns
+save_record "none"
+exit 0

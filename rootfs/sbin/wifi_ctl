@@ -1,0 +1,43 @@
+#!/bin/sh
+# Copyright (C) 2014 Xiaomi
+
+
+#
+# $1 = operation. up/down
+# $2 = interface. 24G/5G/all
+#
+
+. /lib/functions.sh
+
+INTF=
+IF_5G=
+IF_24G=
+
+usage(){
+	echo "wifi_ctl OP INTF"
+	echo "OP = up/down  INTF = 24G/5G/all"
+}
+
+get_wl_intf(){
+        config_load misc
+
+        config_get IF_24G wireless if_2G
+        config_get IF_5G wireless if_5G
+        #echo "24G=" $IF_24G "5G="$IF_5G
+}
+
+get_wl_intf
+
+case "$2" in
+        24G) INTF=$IF_24G;;
+        5G)  INTF=$IF_5G;;
+        all) INTF="" ;;
+        *)
+                echo "Unsupported interface!"
+		usage
+                exit 1;;
+esac
+
+/sbin/wifi $1 $INTF
+exit $?
+

@@ -1,0 +1,37 @@
+#! /bin/sh
+
+# help do swith PHY
+
+. /lib/functions.sh
+config_load misc
+config_get cmd_stop_lan switchop stop_lan
+config_get cmd_start_lan switchop start_lan
+
+phy_stop_lan() {
+    [ -z "$cmd_stop_lan" ] && exit 1
+    eval ${cmd_stop_lan}
+}
+
+phy_start_lan() {
+    [ -z "$cmd_start_lan" ] && exit
+    eval ${cmd_start_lan}
+}
+
+# make client resend DHCP request
+phy_restart_lan() {
+    phy_stop_lan
+    sleep 3
+    phy_start_lan
+}
+
+case "$1" in
+    stop)
+	phy_stop_lan
+    ;;
+    start)
+	phy_start_lan
+    ;;
+    restart)
+	phy_restart_lan
+    ;;
+esac

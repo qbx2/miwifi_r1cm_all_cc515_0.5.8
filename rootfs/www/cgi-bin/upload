@@ -1,0 +1,311 @@
+#!/usr/bin/lua
+
+local config = require("luci.config")
+local ltn12 = require("luci.ltn12")
+local sys = require("luci.sys")
+local fs = require("luci.fs")
+local log = require("xiaoqiang.XQLog")
+
+function limitsource(handle, limit)
+    limit = limit or 0
+    local BLOCKSIZE = ltn12.BLOCKSIZE
+
+    return function()
+        if limit < 1 then
+            handle:close()
+            return nil
+        else
+            local read = (limit > BLOCKSIZE) and BLOCKSIZE or limit
+            limit = limit - read
+
+            local chunk = handle:read(read)
+            if not chunk then handle:close() end
+            return chunk
+        end
+    end
+end
+
+function urldecode_params(url, tbl)
+    local params = tbl or { }
+
+    if url:find("?") then
+        url = url:gsub("^.+%?([^?]+)", "%1")
+    end
+
+    for pair in url:gmatch("[^&;]+") do
+
+        -- find key and value
+        local key = urldecode(pair:match("^([^=]+)"))
+        local val = urldecode(pair:match("^[^=]+=(.+)$"))
+
+        -- store
+        if type(key) == "string" and key:len() > 0 then
+            if type(val) ~= "string" then val = "" end
+
+            if not params[key] then
+                params[key] = val
+            elseif type(params[key]) ~= "table" then
+                params[key] = {params[key], val}
+            else
+                table.insert(params[key], val)
+            end
+        end
+    end
+
+    return params
+end
+
+function urldecode(str, no_plus)
+    local function __chrdec(hex)
+        return string.char(tonumber(hex, 16))
+    end
+
+    if type(str) == "string" then
+        if not no_plus then
+            str = str:gsub("+", " ")
+        end
+
+        str = str:gsub("%%([a-fA-F0-9][a-fA-F0-9])", __chrdec)
+    end
+
+    return str
+end
+
+function initval(tbl, key)
+    if tbl[key] == nil then
+        tbl[key] = ""
+    elseif type(tbl[key]) == "string" then
+        tbl[key] = {tbl[key], ""}
+    else
+        table.insert(tbl[key], "")
+    end
+end
+
+function appendval(tbl, key, chunk)
+    if type(tbl[key]) == "table" then
+        tbl[key][#tbl[key]] = tbl[key][#tbl[key]] .. chunk
+    else
+        tbl[key] = tbl[key] .. chunk
+    end
+end
+
+function parse_message_body(src, msg)
+    if msg and msg.env.CONTENT_TYPE then
+        msg.mime_boundary = msg.env.CONTENT_TYPE:match("^multipart/form%-data; boundary=(.+)$")
+    end
+
+    if not msg.mime_boundary then
+        return nil, "Invalid Content-Type found"
+    end
+
+    local tlen   = 0
+    local inhdr  = false
+    local field  = nil
+    local store  = nil
+    local lchunk = nil
+
+    local function parse_headers(chunk, field)
+        local stat
+        repeat
+            chunk, stat = chunk:gsub(
+                "^([A-Z][A-Za-z0-9%-_]+): +([^\r\n]+)\r\n",
+                function(k,v)
+                    field.headers[k] = v
+                    return ""
+                end
+            )
+        until stat == 0
+
+        chunk, stat = chunk:gsub("^\r\n", "")
+
+        -- End of headers
+        if stat > 0 then
+            if field.headers["Content-Disposition"] then
+                if field.headers["Content-Disposition"]:match("^form%-data; ") then
+                    field.name = field.headers["Content-Disposition"]:match('name="(.-)"')
+                end
+            end
+
+            if field.name then
+                initval(msg.params, field.name)
+
+                store = function(hdr, buf, eof)
+                    appendval(msg.params, field.name, buf)
+                end
+            else
+                store = nil
+            end
+
+            return chunk, true
+        end
+
+        return chunk, false
+    end
+
+    local function snk(chunk)
+        tlen = tlen + (chunk and #chunk or 0)
+
+        if msg.env.CONTENT_LENGTH and tlen > tonumber(msg.env.CONTENT_LENGTH) + 2 then
+            return nil, "Message body size exceeds Content-Length"
+        end
+
+        if chunk and not lchunk then
+            lchunk = "\r\n" .. chunk
+        elseif lchunk then
+            local data = lchunk .. (chunk or "")
+            local spos, epos, found
+
+            repeat
+                spos, epos = data:find("\r\n--" .. msg.mime_boundary .. "\r\n", 1, true)
+
+                if not spos then
+                    spos, epos = data:find("\r\n--" .. msg.mime_boundary .. "--\r\n", 1, true)
+                end
+
+                if spos then
+                    local predata = data:sub(1, spos - 1)
+
+                    if inhdr then
+                        predata, eof = parse_headers(predata, field)
+
+                        if not eof then
+                            return nil, "Invalid MIME section header"
+                        elseif not field.name then
+                            return nil, "Invalid Content-Disposition header"
+                        end
+                    end
+
+                    if store then
+                        store(field, predata, true)
+                    end
+
+                    field = {headers = { }}
+                    found = found or true
+
+                    data, eof = parse_headers(data:sub(epos + 1, #data), field)
+                    inhdr = not eof
+                end
+            until not spos
+
+            if found then
+                -- We found at least some boundary
+                lchunk, data = data, nil
+            else
+                if inhdr then
+                    lchunk, eof = parse_headers(data, field)
+                    inhdr = not eof
+                else
+                    store(field, lchunk, false)
+                    lchunk, chunk = chunk, nil
+                end
+            end
+        end
+
+        return true
+    end
+
+    return ltn12.pump.all(src, snk)
+end
+
+function status(code, message)
+    code = code or 200
+    message = message or "OK"
+    statusline = "Status: " .. code .. " " .. message .. " \r\n\r\n"
+    print(statusline)
+end
+
+-------------------------------------------------------------------------------
+-----------------------start parse message body from fcgi----------------------
+-------------------------------------------------------------------------------
+local env = sys.getenv()
+local input = limitsource(io.stdin, tonumber(sys.getenv("CONTENT_LENGTH")))
+local message = {
+    env = env,
+    headers = {},
+    params = urldecode_params(env.QUERY_STRING or ""),
+}
+parse_message_body(input, message)
+
+-- validate session
+local stok = message.params["stok"]
+log.log("stok=", stok)
+if not stok then
+    status(401, "Unauthorized")
+    return
+end
+config.sauth = config.sauth or {}
+local sessionpath = config.sauth.sessionpath
+log.log("sessionpath=", sessionpath)
+local blob = fs.isfile(sessionpath .. "/" .. stok)
+if blob ~= true then
+    status(401, "Unauthorized")
+    return
+end
+
+-- get nginx module store file path
+local filepath = message.params["file_path"]
+log.log("filepath=", filepath)
+if not filepath then
+    status(500, "Internal Server Error")
+    return
+end
+
+-- get file name
+local filename = message.params["file_name"]
+filename = string.gsub(filename, "+", " ")
+filename = string.gsub(filename, "%%(%x%x)",
+    function(h)
+        return string.char(tonumber(h, 16))
+    end)
+filename = filename.gsub(filename, "\r\n", "\n")
+log.log("filename=", filename)
+if not filename then
+    status(500, "Internal Server Error")
+    return
+end
+
+-- get target path
+local path = message.params["target"]
+if string.match(path, "\/$") == nil then
+    path = path .. "/"
+end
+local constPrefix1 = "/userdisk/data/"
+local constPrefix2 = "/extdisks/"
+if (string.sub(path, 1, string.len(constPrefix1)) ~= constPrefix1) and (string.sub(path, 1, string.len(constPrefix2)) ~= constPrefix2) then
+    status(400, "Bad Request")
+    return
+end
+fs.mkdir(path, true)
+log.log("path=", path)
+
+-- real name
+local savename = filename
+if fs.isfile(path .. savename) then
+    local basename = savename
+    local index = basename:match(".+()%.%w+$")
+    if index then
+        basename = basename:sub(1, index - 1)
+    end
+    local extension = savename:match(".+%.(%w+)$")
+    for i = 1, 100, 1 do
+        local tmpname = basename .. "(" .. i .. ")"
+        if extension then
+            tmpname = tmpname .. "." .. extension
+        end
+        if not fs.isfile(path .. tmpname) then
+            savename = tmpname
+            break
+        end
+    end
+end
+
+-- move tmp file to target
+local dest = path .. savename
+log.log("dest=" .. dest)
+local stat = fs.rename(filepath, dest)
+if stat ~= true then
+    status(500, "Internal Server Error")
+    return
+end
+
+status(200, "OK")

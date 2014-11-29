@@ -1,0 +1,12 @@
+#!/bin/sh
+
+pid_file="/tmp/pid_updateledfliker"
+if [ -f $pid_file ]; then
+	exist_pid=`cat $pid_file`
+	if [ -n $exist_pid ]; then
+		kill $exist_pid 2>/dev/null
+	fi
+fi
+
+#turn on blue led
+gpio 3 0

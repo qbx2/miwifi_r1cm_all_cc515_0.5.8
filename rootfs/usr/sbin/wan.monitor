@@ -1,0 +1,452 @@
+#!/bin/sh
+#
+#check wan status and vpn status
+#
+export LANG=C
+#
+export PROC_LOCK_DEBUG='TRUE'
+
+# skip wan monitor in FT mode
+ft_mode=`cat /proc/xiaoqiang/ft_mode`
+if [ "$ft_mode" = "1" ]; then
+	return 0
+fi
+
+#
+. /lib/lib.scripthelper.sh
+#
+. /lib/lib.wan.monitor.sh
+#
+BOOTCHECKCODEFILE='/tmp/rc.done'
+#
+SCRIPTNICE=0
+#
+test "$1" = 'stop' && exit 0
+#
+dlog "INFO: wan.monitor disabled by PM, pending to remove."
+#
+setlinkstat up dns mute
+setlinkstat up wan mutes
+setlinkstat down vpn mute
+exit 0
+
+#
+#TODO: save link stat in array for IPC
+export SCRIPTARRAYDIR='/tmp/arrays/network/linkstat/'
+
+#
+if [ "$1" = 'dnschecker' ]
+	then
+	trap exit SIGTERM SIGINT
+	SCRIPTTAG="$SCRIPTTAG/dnschecker"
+	mppid="$2"
+	if [ -z "$mppid" ]
+		then
+		dlog "ERROR: need second arg parent pid"
+		exit 1
+	fi
+	let mppid=$mppid+1-1 2>/dev/null
+	if [ $? -ne 0 ]
+		then
+		dlog "ERROR: invalid parent pid: $mppid"
+		exit 1
+	fi
+	if [ $mppid -le 5 ]
+		then
+		dlog "ERROR: too small parent pid: $mppid <= 5"
+		exit 1
+	fi
+	dlog "INFO: $SCRIPTPID running, parent pid $mppid ..."
+	setlinkstat up dns mute
+	sleep 15
+	dnsup=1
+	warned=0
+	failcnt=0
+	resolvautowarned=0
+	upstreamdnsdowncnt=0
+	resolvdnserrcnt=0
+	routeaddwarned=0
+	while [ : ]
+	do
+		sleep 5
+		#checking upstream dns server
+		resolvautofile="`cat /var/etc/dnsmasq.conf 2>/dev/null| grep resolv-file | awk -F'=' '{print $2}'`"
+		resolvdnserrcnt=0
+		if [ -z "$resolvautofile" ]
+			then
+			test $resolvautowarned -eq 0 && dlog "WARNING: probe resolv-file config from /var/etc/dnsmasq.conf failed."
+			resolvautowarned=1
+			let resolvdnserrcnt=$resolvdnserrcnt+1
+		else
+			#dlog "DEBUG: got resolv-file config from /var/etc/dnsmasq.conf: $resolvautofile"
+			upstreamdns=`cat "$resolvautofile" 2>/dev/null | grep '^nameserver' | awk '{print $2}'`
+			if [ -z "$upstreamdns" ]
+				then
+				test $resolvautowarned -eq 0 && dlog "WARNING: probe upstream dns server from $resolvautofile failed."
+				resolvautowarned=1
+				let resolvdnserrcnt=$resolvdnserrcnt+1
+			else
+				#dlog "DEBUG: got upstream dns server from ${resolvautofile}: $upstreamdns"
+				NETGW=$(getdefaultrouteip)
+				errcnt=0
+				for onens in $upstreamdns
+				do
+					#TODO: check dns host route exist and set route
+					if [ -n "$NETGW" -a "$NETGW" != "$onens" ]
+					then
+						addmsg=$(addroute -host $onens gw $NETGW 2>&1)
+						if [ -n "$addmsg" ]
+							then
+							test $routeaddwarned -eq 0 && dlog "ERROR: route add -host $onens gw $NETGW failed: $addmsg"
+							let errcnt=$errcnt+1
+						fi
+					fi
+				done
+				if [ $errcnt -eq 0 ]
+					then
+					routeaddwarned=0
+				else
+					routeaddwarned=1
+					let resolvdnserrcnt=$resolvdnserrcnt+1
+				fi
+				#check dns resolver, timeout 3 seconds
+				nscnt=0
+				for onens in $upstreamdns
+				do
+					addrlist=`/usr/sbin/nslookupt 127.0.0.1 $onens 3`
+					ret=`echo "$addrlist" | awk -F'/' '{print $3}'`
+					if [ -n "$ret" ]
+						then
+						let nscnt=$nscnt+1
+					fi
+				done
+				if [ $nscnt -eq 0 ]
+					then
+					let upstreamdnsdowncnt=$upstreamdnsdowncnt+1
+					if [ $upstreamdnsdowncnt -eq 3 ]
+						then
+						dlog "WARNING: all upstream dns server $upstreamdns failed."
+						let resolvdnserrcnt=$resolvdnserrcnt+1
+					fi
+					resolvautowarned=1
+				else
+					test $upstreamdnsdowncnt -ge 3 && dlog "INFO: $nscnt upstream dns server $upstreamdns ok."
+					resolvautowarned=0
+					upstreamdnsdowncnt=0
+					resolvdnserrcnt=0
+				fi
+			fi
+			olddns="$upstreamdns"
+			oldgw="$NETGW"
+		fi
+		if [ $resolvdnserrcnt -ne 0 ]
+			then
+			let failcnt=$failcnt+2
+		fi
+		if [ -s "$MONITORCFGFILE" ]
+			then
+			. $MONITORCFGFILE
+		fi
+		kill -0 $mppid 2>/dev/null
+		if [ $? -ne 0 ]
+			then
+			dlog "INFO: exit for parent $mppid exited."
+			exit 0
+		fi
+		dnscheck $warned
+		if [ $? -ne 0 ]
+			then
+			test $failcnt -eq 5 && dlog "WARNING: local dns is down."
+			warned=1
+			let failcnt=$failcnt+1
+		else
+			test $warned -ne 0 -a $failcnt -ge 5 && dlog "INFO: local dns is up."
+			warned=0
+			failcnt=0
+			test $dnsup -eq 0 && setlinkstat "up" "dns"
+			dnsup=1
+		fi
+		if [ $failcnt -ge 9 -a $dnsup -ne 0 ]
+		then
+			dnsup=0
+			dlog "WARNING: local dns $WANDOMAINLIST @127.0.0.1 is down, count $failcnt"
+			setlinkstat "down" "dns"
+			#try to restart dnsmasq if wan link is ok
+			islinkup 'wan'
+			# 1 for up, 0 for down
+			if [ $? -ne 0 ]
+				then
+				dlog "INFO: restart dnsmasq ..."
+				/etc/init.d/dnsmasq restart
+				sleep 10
+			fi
+		fi
+	done
+	exit 0
+fi
+#
+daemonstop(){
+	dlog "INFO: pre-exit ..."
+}
+daemonpostexit(){
+	#run in supervisord stop
+	if [ "$(argmatch stop)" = "1" -a "$(argmatch setdown)" = "1" ]
+		then
+		dlog "INFO: set wan/dns status to down."
+		setlinkstat down wan
+		setlinkstat down dns
+	fi
+	return 0
+}
+#
+op="$1"
+if [ "$op" = 'boot' ]
+	then
+	op='start'
+fi
+
+if [ ! -x /usr/bin/nohup ]
+	then
+	dlog "ERROR: /usr/bin/nohup no executable, please install coreutils-nohup package"
+	exit 1
+fi
+#
+#run in daemon
+#
+export SCRIPTNICE=0
+#
+procdaemon fixme
+#
+nohup $SCRIPTSELFT 'dnschecker' $SCRIPTPID daemon >/dev/null 2>&1 &
+#
+dlog "INFO: network status monitor $op"
+
+if [ -s "$MONITORCFGFILE" ]
+	then
+	. $MONITORCFGFILE
+else
+	dlog "WARNING: network status configure file no exist: $MONITORCFGFILE"
+fi
+if [ -z "$WANDOMAINLIST" ]
+	then
+	dlog "WARNING: WANDOMAINLIST empty, local dns will no monitor."
+fi
+if [ -z "$VPNDOMAINLIST" ]
+	then
+	dlog "WARNING: VPNDOMAINLIST empty, vpn dns will no monitor."
+fi
+
+#initial
+setlinkstat down wan mute
+setlinkstat down vpn mute
+wanup=0
+vpnup=0
+
+warned=0
+vpnwarned=0
+failcnt=2
+vpnfailcnt=0
+vpnenvok=0
+resolvautowarned=0
+resolvautofile='/tmp/resolv.conf.auto'
+olddns=''
+oldgw=''
+dnsdowncnt=0
+maxdnsdowncnt=10
+maxwandowncnt=20
+upstreamdnsdowncnt=0
+ntpflushcnt=0
+dontpcmd=0
+#
+while [ : ]
+do
+	sleep 5
+	let ntpflushcnt=$ntpflushcnt+1
+	if [ -s "$MONITORCFGFILE" ]
+		then
+		. $MONITORCFGFILE
+	fi
+	wancheck $warned
+	wanexitcode=$?
+	#0 for ok
+	if [ $wanexitcode -ne 0 ]
+		then
+		warned=1
+		let failcnt=$failcnt+$wanexitcode
+		#let failcnt=$failcnt+1
+	else
+		#ok
+		if [ -s "$BOOTCHECKCODEFILE" ]
+			then
+			cat $BOOTCHECKCODEFILE 2>/dev/null | grep -q 'BOOTCHECKCODE=0;'
+			bootcheckcode=$?
+		else
+			bootcheckcode=0
+		fi
+		if [ $ntpflushcnt -ge 60 ]
+			then
+			#5 min, 300s
+			ntpflushcnt=0
+			dontpcmd=1
+		fi
+		if [ $failcnt -ge 1 ]
+			then
+			#wan come back to up
+			dontpcmd=1
+		fi
+		if [ $dontpcmd -eq 1 -a $bootcheckcode -eq 0 ]
+			then
+			nohup /usr/sbin/ntpsetclock 60 log mute nodisksave >/dev/null 2>&1 </dev/zero &
+			if [ $? -ne 0 ]
+				then
+				dlog "WANRING: ntp -q set clock start failed."
+			fi
+			dontpcmd=0
+		fi
+		warned=0
+		if [ $wanup -eq 0 ]
+			then
+			setlinkstat "up" "wan"
+			if [ $failcnt -ge 1 ]
+				then
+				#
+				logsysteminfo dlog
+				#
+				dlog "INFO: restart dnsmasq for wan link switch from down to up."
+				#
+				/etc/init.d/dnsmasq restart
+				#
+				sleep 2
+				dlog "INFO: ntp sync for wan link switch from down to up."
+				nohup /usr/sbin/ntpsetclock 60 log mute nodisksave >/dev/null 2>&1 </dev/zero &
+				if [ $? -ne 0 ]
+					then
+					dlog "WANRING: nohup /usr/sbin/ntpsetclock 60 log mute nodisksave start failed."
+				fi
+				#
+			fi
+		fi
+		failcnt=0
+		wanup=1
+		maxwandowncnt=20
+	fi
+	#
+	ipconfictcheck
+	#
+	if [ $failcnt -ge 9 -a $wanup -ne 0 ]
+		then
+		dlog "WARNING: LOCALGW $LOCALGW unreachable, count $failcnt"
+		#
+		#check vpn status
+		#
+		setlinkstat "down" "wan"
+		#
+		if [ $wanup -ne 0 ]
+			then
+			#
+			dlog "INFO: restart dnsmasq for wan link switch from up to down."
+			#
+			/etc/init.d/dnsmasq restart
+		fi
+		wanup=0
+		#try to restart wan link,when link set to autostart
+		#grep -q	Quiet. Return 0 if PATTERN is found, 1 otherwise
+		ubus call network.interface.wan status|grep "autostart"|grep -qs "true"
+		if [ $? -eq 0 ]; then
+			dlog "INFO: try to restart wan link."
+			#ifdown wan
+			#sleep 1
+			ifup wan
+		fi
+	fi
+	if [ $failcnt -eq $maxwandowncnt ]
+		then
+		wanup=0
+		dlog "WARNING: LOCALGW $LOCALGW unreachable, count $failcnt"
+		setlinkstat "down" "wan"
+		#try to restart wan link,when link set to autostart
+		#grep -q	Quiet. Return 0 if PATTERN is found, 1 otherwise
+		#%##ubus call network.interface.wan status|grep "autostart"|grep -qs "true"
+		#%##if [ $? -eq 0 ]; then
+		#%##	dlog "INFO: try to restart wan link."
+		#%##	#ifdown wan
+		#%##	#sleep 1
+		#%##	ifup wan
+		#%##fi
+		let maxwandowncnt=$maxwandowncnt+10
+	fi
+	#0 for down
+	islinkup dns
+	if [ $? -eq 0 ]
+		then
+		let dnsdowncnt=$dnsdowncnt+1
+	else
+		if [ $dnsdowncnt -gt 0 ]
+			then
+			dlog "INFO: local dns is up."
+		fi
+		dnsdowncnt=0
+		maxdnsdowncnt=10
+	fi
+	if [ $dnsdowncnt -ge $maxdnsdowncnt ]
+		then
+		#ubus call network.interface.wan status|grep "autostart"|grep -qs "true"
+		#if [ $? -eq 0 ]; then
+		#	dlog "WARNING: local dns down count $dnsdowncnt, try to restart wan link ..."
+		#	#ifdown wan
+		#	#sleep 1
+		#	ifup wan
+		#fi
+		#try to restart dnsmasq if wan link is ok
+		islinkup 'wan'
+		# 1 for up, 0 for down
+		if [ $? -ne 0 ]
+			then
+			dlog "WARNING: local dns down count $dnsdowncnt, try to restart dnsmasq service ..."
+			/etc/init.d/dnsmasq restart
+			sleep 10
+		fi
+		dnsdowncnt=0
+		let maxdnsdowncnt=$maxdnsdowncnt+10
+	fi
+	if [ -s /tmp/traffic.route.env ]
+		then
+		if [ $vpnenvok -eq 0 ]
+			then
+			vpnwarned=0
+			vpnfailcnt=0
+			test $vpnup -eq 0 && dlog "INFO: set vpn link ok for env created." && setlinkstat "up" "vpn"
+			vpnup=1
+		fi
+		vpnenvok=1
+	else
+		if [ $vpnup -ne 0 ]
+			then
+			dlog "WARNING: empty /tmp/traffic.route.env"
+			setlinkstat "down" "vpn"
+			vpnup=0
+		fi
+		vpnenvok=0
+		continue
+	fi
+	#
+	vpncheck $vpnwarned
+	if [ $? -ne 0 ]
+		then
+		vpnwarned=1
+		let vpnfailcnt=$vpnfailcnt+1
+	else
+		vpnwarned=0
+		vpnfailcnt=0
+		test $vpnup -eq 0 && setlinkstat "up" "vpn"
+		vpnup=1
+	fi
+	if [ $vpnfailcnt -ge 3 -a $vpnup -ne 0 ]
+		then
+		vpnup=0
+		dlog "WARNING: VPNGW $VPNGW unreachable, count $vpnfailcnt"
+		setlinkstat "down" "vpn"
+	fi
+done
+exit 0
+#

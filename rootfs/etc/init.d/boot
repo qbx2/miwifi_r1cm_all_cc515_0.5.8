@@ -1,0 +1,182 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2006-2011 OpenWrt.org
+
+START=10
+STOP=98
+
+applog(){
+	msg="$@"
+	test -z "$msg" && return 0
+	test -z "$APPLOGTAG" && APPLOGTAG="init.d/boot"
+	/usr/bin/logger -t "${APPLOGTAG}[${$}]" "$msg"
+	DATE="`date`"
+	echo "$DATE ${APPLOGTAG}[${$}]: $msg" >> /dev/console 2>/dev/null
+	return 0
+}
+pipelog(){
+	local oneline
+	while read oneline
+	do
+		applog "$oneline"
+	done
+}
+#
+system_config() {
+	local cfg="$1"
+
+	local hostname conloglevel timezone
+
+	config_get hostname "$cfg" hostname 'OpenWrt'
+	echo "$hostname" > /proc/sys/kernel/hostname
+
+	config_get conloglevel "$cfg" conloglevel
+	config_get buffersize "$cfg" buffersize
+	[ -z "$conloglevel" -a -z "$buffersize" ] || dmesg ${conloglevel:+-n $conloglevel} ${buffersize:+-s $buffersize}
+
+	config_get timezone "$cfg" timezone 'UTC'
+	echo "$timezone" > /tmp/TZ
+
+	config_get zonename "$cfg" zonename
+	[ -n "$zonename" ] && [ -f "/usr/share/zoneinfo/$zonename" ] && ln -s "/usr/share/zoneinfo/$zonename" /tmp/localtime
+
+	# apply timezone to kernel
+	date -k
+	#squashfs run busybox's syslogd
+	boot_type="$(nvram get flag_boot_type 2>/dev/null)"
+	if [ -z "$boot_type" -a "$(uname -m)" = 'mips' ]
+		then
+		#mtk7620 hack
+		boot_type='2'
+	fi
+	if [ "$boot_type" = "2" ]; then
+		if [ -x /sbin/syslogd ]; then
+			local args log_ip log_size log_port log_type log_file log_rotate
+			config_get log_ip "$cfg" log_ip
+			config_get log_size "$cfg" log_size 16
+			config_get log_port "$cfg" log_port 514
+			config_get log_type "$cfg" log_type circular
+			config_get log_file "$cfg" log_file "/data/usr/log/messages"
+			config_get log_rotate "$cfg" log_rotate "1"
+			args="${log_ip:+-L -R ${log_ip}:${log_port}} ${conloglevel:+-l $conloglevel}"
+			if [ "$log_type" = "file" ]; then
+				mkdir -p "$(dirname $log_file)" 2>/dev/null && touch $log_file || echo "ERROR: create syslog file failed
+: $log_file"
+				args="$args -s $log_size -O $log_file -S -b $log_rotate"
+			else
+				args="$args -C${log_size}"
+			fi
+			service_start /sbin/syslogd $args
+		fi
+		if [ -x /sbin/klogd ]; then
+			config_get klogconloglevel "$cfg" klogconloglevel
+			args="${klogconloglevel:+-c $klogconloglevel}"
+			service_start /sbin/klogd $args
+		fi
+	fi
+}
+
+apply_uci_config() {
+	sh -c '. /lib/functions.sh; include /lib/config; uci_apply_defaults'
+}
+
+start() {
+	[ -f /proc/mounts ] || /sbin/mount_root
+	[ -f /proc/jffs2_bbc ] && echo "S" > /proc/jffs2_bbc
+	[ -f /proc/net/vlan/config ] && vconfig set_name_type DEV_PLUS_VID_NO_PAD
+
+	mkdir -p /var/run
+	mkdir -p /var/log
+	mkdir -p /var/lock
+	mkdir -p /var/state
+	mkdir -p /tmp/.uci
+	chmod 0700 /tmp/.uci
+	touch /var/log/wtmp
+	touch /var/log/lastlog
+	touch /tmp/resolv.conf.auto
+	ln -sf /tmp/resolv.conf.auto /tmp/resolv.conf
+	grep -q debugfs /proc/filesystems && mount -t debugfs debugfs /sys/kernel/debug
+	[ "$FAILSAFE" = "true" ] && touch /tmp/.failsafe
+
+	#store the kernel panic log
+	mtdcrashpart="$(find_mtd_part crash)" # /dev/mtdblock4
+	if [ -z "$mtdcrashpart" ]; then
+		echo "Couldn't find crash part"
+	else
+		tmpft=`cat /proc/xiaoqiang/ft_mode`
+		if [ "$tmpft" = "0" ]; then
+			tempString=`head -c 4 $mtdcrashpart | hexdump`
+			tempString=`echo $tempString | awk -F " " '{print $1$2$3}'`
+			if [ "$tempString" != "0000000ffffffff" ]; then
+                               cd /tmp
+                               cat $mtdcrashpart > crash.bin
+                               mtd_crash_log -x crash.bin
+                               if [ -f "panic.message" ]; then
+                                       mv panic.message /data/usr/log
+                               fi
+
+                               if [ -f "panic.message.gz" ]; then
+                                       mv panic.message.gz /data/usr/log
+                               fi
+
+				mtd erase crash
+			fi
+		fi
+	fi
+
+	load_modules /etc/modules.d/*
+
+	flag=`nvram get flag_boot_type`
+	if [ "$flag" = "1" ]; then
+		#check writeable befor create swapfile
+		touch /userdisk/.swapfiles 2>/dev/null
+		if [ $? -eq 0 -a ! -s /userdisk/.swapfiles ]
+			then
+			#is writeable
+			# enable swap space
+			#256mb
+			dd if=/dev/zero of=/userdisk/.swapfiles bs=16k count=16k 2>&1
+			mkswap /userdisk/.swapfiles 2>&1
+			sync
+		fi
+		[ -f /userdisk/.swapfiles ] && swapon /userdisk/.swapfiles 2>&1
+	fi
+
+	# switch irq to core1 handle
+	smpaff=`cat /proc/irq/default_smp_affinity`
+	if [ "$smpaff" = "3" ]; then
+		echo 2 > /proc/irq/163/smp_affinity
+		echo 2 > /proc/irq/169/smp_affinity
+		echo 2 > /proc/irq/179/smp_affinity
+	fi
+
+	[ -s /etc/config/wireless ] || {
+		/sbin/wifi detect > /tmp/wireless.tmp
+
+		[ -s /tmp/wireless.tmp ] && {
+			cat /tmp/wireless.tmp > /etc/config/wireless
+		}
+		rm -f /tmp/wireless.tmp
+	}
+
+	apply_uci_config
+	config_load system
+	config_foreach system_config system
+
+	killall -q hotplug2
+	[ -x /sbin/hotplug2 ] && /sbin/hotplug2 --override --persistent \
+			--set-rules-file /etc/hotplug2.rules \
+			--set-coldplug-cmd /sbin/udevtrigger \
+			--max-children 1 >/dev/null 2>&1 &
+
+	# create /dev/root if it doesn't exist
+	[ -e /dev/root -o -h /dev/root ] || {
+		rootdev=$(awk 'BEGIN { RS=" "; FS="="; } $1 == "root" { print $2 }' < /proc/cmdline)
+		[ -n "$rootdev" ] && ln -s "$rootdev" /dev/root
+	}
+	return 0
+}
+
+stop() {
+	[ -x /sbin/klogd ] && service_stop /sbin/klogd
+	[ -x /sbin/syslogd ] && service_stop /sbin/syslogd
+}

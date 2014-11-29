@@ -1,0 +1,1 @@
+../init.d/usb_deploy_init_script.sh

@@ -1,0 +1,23 @@
+#!/bin/sh
+xiaoqiangversion=$(cat /usr/share/xiaoqiang/xiaoqiang_version 2>/dev/null)
+test -z "$xiaoqiangversion" && xiaoqiangversion='unknow-rom-ver'
+#
+hwver=`hwversion`
+
+echo ""
+#echo "U-Boot ver: $ubootver"
+echo "ROM    ver: $xiaoqiangversion"
+echo "Hardware  : $hwver"
+echo "ROM    sum: $romchecksum"
+#echo "FIRMWARE  : $bootfirmware // $expectroot"
+echo "KERNEL    : `cat /proc/cmdline`"
+if [ "$1" = 'ver' ]
+	then
+	exit 0
+fi
+echo ""
+echo "MTD  table:"
+cat /proc/mtd
+echo ""
+exit 0
+#

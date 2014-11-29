@@ -1,0 +1,56 @@
+#!/bin/sh /etc/rc.common
+
+#exec after all rc boot script
+START=99zzzzz
+#exec befor all rc shutdown script
+STOP=01
+
+export LOGTAG='post-system-up-down'
+
+conlog(){
+	msg="$@"
+	test -z "$msg" && return 0
+	DATE="`date`"
+	/usr/bin/logger -t "${LOGTAG}[${$}]" "$msg"
+	echo "$DATE ${LOGTAG}[${$}]: $msg" >> /dev/console 2>/dev/null
+	return 0
+}
+pipelog(){
+	local oneline
+	while read oneline
+	do
+		conlog "$oneline"
+	done
+}
+start() {
+	export LOGTAG='post-system-up'
+	#
+	chmod 0600 /etc/ppp/*-secrets 2>/dev/null
+	#
+	flag_tftp_bootup="$(nvram get flag_tftp_bootup)"
+	flag_tftp_booted="$(nvram get flag_tftp_booted)"
+	if [ "$flag_tftp_booted" != 'true' -o "$flag_tftp_bootup" != 'on' ]
+		then
+		#conlog " ******* NORMAL BOOT ******* "
+		return 0
+	fi
+	#
+	/sbin/wifi down && conlog "INFO: wifi disabled."
+	#
+	TFTP_UPGRADE_DONE=$(nvram get TFTP_UPGRADE_DONE)
+	if [ -n "$TFTP_UPGRADE_DONE" ]
+		then
+		conlog " * "
+		conlog " ******* TFTP UPGRADED: $TFTP_UPGRADE_DONE ******* "
+		conlog " * "
+	fi
+	return 0
+}
+
+stop() {
+	export LOGTAG='post-system-down'
+	#
+	/usr/sbin/ntpsetclock save >/dev/null 2>&1
+	#
+	return $?
+}

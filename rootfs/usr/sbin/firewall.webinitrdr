@@ -1,0 +1,23 @@
+#!/bin/sh
+#
+. /lib/lib.scripthelper.sh
+#
+prelock=${SCRIPTLOCK}
+SCRIPTLOCK="${SCRIPTMARK}-${1}"
+#
+checkproclock 0
+if [ $? -ne 0 ]
+	then
+	dlog "INFO: another $1 proc($(getlockedprocpid)) already running."
+	exit 0
+fi
+#
+SCRIPTLOCK=${prelock}
+#
+#no blocking running
+#
+procdaemon fixme
+#
+/usr/sbin/sysapi.firewall webinitrdr $@
+exit $?
+#

@@ -1,0 +1,87 @@
+#!/usr/bin/env lua
+local posix = require("Posix")
+
+
+local cfg = {
+        ['postfile'] = "/tmp/postfile.dat",
+        ['postfilesize'] = 512,  -- kbyte
+        ['posturl'] = "http://netsp.master.qq.com/cgi-bin/netspeed",
+        ['geturl'] = "http://dlied6.qq.com/invc/qqdoctor/other/test32mb.dat",
+        ['nr'] = 40,        --Number of requests to perform
+        ['nc'] = 5,     --Number of multiple requests to make at a time
+        ['timelimit'] = 5,
+        ['timestep'] = 1,
+        ['ab'] = "/usr/bin/ab",
+        ['dd'] = "/bin/dd",
+        ['debug'] = 0,
+        ['xmlfile'] = "/etc/speedtest.xml",
+    }
+
+
+function mrandom(min,max,num)
+    local reverse = {}
+    local t = {}
+    local ret = {}
+    local i = min
+    local index
+    while i <= max do
+        table.insert(t, i)
+        i = i + 1
+    end
+
+    i = num
+    math.randomseed(os.time())
+
+    while i > 0 do
+        index = math.random(table.getn(t))
+        table.insert(ret,t[index])
+        if index == table.getn(t) then
+            table.remove(t)
+        else
+            local top = table.remove(t)
+            t[index] = top
+        end
+        i = i - 1
+    end
+    return ret
+end
+
+
+function execa(cmd)
+    local p = io.popen(cmd)
+    local line = p:read("*l")
+	while(line) do
+		print(line)
+		line = p:read("*l")
+	end
+    p:close()
+end
+
+
+
+local pp = io.open(cfg.xmlfile)
+local line = pp:read("*line")
+local size = 0
+local resources = {}
+local u = ""
+
+while line do
+    local _, _, url = string.find(line,'<item url="(.*)"/>')
+    if url then
+        table.insert(resources, url)
+    end
+    line = pp:read("*line")
+end
+pp:close()
+
+local urls = mrandom(1, table.getn(resources), cfg.nc)
+for k, v in ipairs(urls) do
+    u = u .. " " .. resources[v]
+end
+
+
+local cmd = string.format("%s -N -s %d -M %d -n %d -c %d %s",
+    cfg.ab, cfg.timestep, cfg.timelimit, cfg.nr, cfg.nc, u)
+
+execa(cmd)
+

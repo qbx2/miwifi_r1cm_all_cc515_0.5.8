@@ -1,0 +1,38 @@
+#!/bin/sh
+# Copyright (C) 2006-2010 OpenWrt.org
+# Copyright (C) 2010 Vertical Communications
+
+find_mount_jffs2() {
+    flg=`nvram get flag_format_overlay`
+    if [ "$flg" = "1" ] ; then
+	mtd erase overlay
+    fi
+
+    mount "$(find_mtd_part overlay)" /data -t jffs2
+    if [ $? -ne 0 ] ; then
+	mtd erase overlay
+	mount "$(find_mtd_part overlay)" /data -t jffs2
+    fi
+
+    mtd -qq unlock overlay
+
+    mkdir -p /data/usr/log
+}
+
+jffs2_not_mounted() {
+    if [ "$pi_jffs2_mount_success" != "true" ]; then
+	return 0
+    else
+	return 1
+    fi
+}
+
+do_mount_jffs2() {
+    do_mount=`uci get misc.mount_jffs2.do_mount`
+    [ "$do_mount" = "1" ] && {
+	find_mount_jffs2 && pi_jffs2_mount_success=true
+    }
+}
+
+boot_hook_add preinit_mount_root do_mount_jffs2
+

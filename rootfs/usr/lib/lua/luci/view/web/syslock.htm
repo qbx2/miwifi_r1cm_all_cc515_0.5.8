@@ -1,0 +1,226 @@
+<%
+    local ver = require("xiaoqiang.XQVersion").webVersion
+    local uci = require "luci.model.uci"
+    local cursor = uci.cursor()
+    local lang = cursor.get("luci.main.lang")
+    if lang=="auto" then
+        lang = "zh_cn"
+    end
+%>
+<%include ("web/inc/head")%>
+<title><%:小米路由器%></title>
+<meta name="viewport" content="width=1200">
+<link rel="stylesheet" href="<%=resource%>/web/css/bc.css?v=<%=ver%>">
+<link rel="stylesheet" href="<%=resource%>/web/css/guide.css?v=<%=ver%>">
+</head>
+<body>
+<div id="guide-doc">
+    <div id="guide-hd">
+        <div class="mod-guide-hd">
+            <div class="logo"><img src="<%=resource%>/web/img/logo.png?v=<%=ver%>"></div>
+            <div class="icons"><img src="<%=resource%>/web/img/update.png?v=<%=ver%>"></div>
+        </div>
+    </div>
+
+    <div id="guide-bd">
+        <div class="mod-upgrade">
+            <div id="dldProgress" class="progress-box">
+                <div class="progress-text"><b id="persent" class="value">0</b>%</div>
+                <div class="progress">
+                    <div class="bar" id="persentWidth" style="width: 0%;"></div>
+                </div>
+            </div>
+            <div id="flashProgress" class="flash-box" style="display:none;">
+                <p class="loading-text"><%:小米路由器正在进行系统升级，大约需要5-8分钟...%></p>
+                <div class="loading-bar"></div>
+            </div>
+            <div class="btn-box">
+                <p id="flashstatus"><%:升级完成前请不要切断路由器电源%></p>
+                <a href="#" class="btn btn-primary" id="btnCancel" style="display:none;"><span><%:取消升级%></span></a>
+            </div>
+        </div>
+    </div>
+</div>
+<%include ("web/inc/g.js")%>
+<script>
+$(function(){
+
+    var timer = null,
+        homeUrl = 'http://' + location.host,
+        // 下载升级包
+        downflash = function() {
+            var requestData = {},
+                requestURL = '<%=luci.dispatcher.build_url("api", "xqsystem", "upgrade_rom")%>';
+            $.getJSON( requestURL, {}, function( rsp ) {
+                if (rsp.code !== 0) {
+                    downError( rsp.msg );
+                } else {
+                    downStatus();
+                }
+            });
+        },
+        // 下载ROM失败
+        downError = function( msg ) {
+            openRefresh();
+            $.dialog({
+                width: 400,
+                title: '<%:升级失败%>',
+                content: msg,
+                okValue: '<%:确认%>',
+                cancel: false,
+                ok: function() {
+                    window.location.href = homeUrl;
+                }
+            }).lock();
+        },
+        // 展示下载进度
+        showPercent = function( num ) {
+            $( '#persent' ).html( num );
+            $( '#persentWidth' ).css( 'width', num + "%" );
+        },
+        // 检测下载进度
+        downStatus = function() {
+            var requestData = {},
+                requestURL = '<%=luci.dispatcher.build_url("api", "xqsystem", "upgrade_status")%>';
+            var getStatus = null;
+            timer = window.setInterval( function() {
+                if ( getStatus ) {
+                    return;
+                    // getStatus.abort();
+                }
+                getStatus = $.ajax( requestURL, {
+                    timeout: 3 * 60 * 1000,
+                    dataType: 'json',
+                    success: function( rsp ) {
+                        getStatus = null;
+                        if ( rsp.code == 0 ) {
+                            var status = rsp.status;
+                            if ( status == 3 ) {
+                                $( "#btnCancel" ).show();
+                            } else {
+                                $( "#btnCancel" ).hide();
+                            }
+                            if ( /(3|5|11|12)/.test( status ) ) {
+                                showPercent( rsp.percent );
+                            }
+                            //flash fail
+                            if( /(6|7|8|9|10)/.test( status ) ){
+                                window.clearInterval( timer );
+                                var msg = {
+                                    6: '<%:下载失败%>',
+                                    7: '<%:没有磁盘空间%>',
+                                    8: '<%:下载失败%>',
+                                    9: '<%:升级包校验失败%>',
+                                    10: '<%:刷写失败%>'
+                                };
+                                downError( msg[status] );
+                            }
+                            if ( status == 5 ) {
+                                window.clearInterval( timer );
+                                flashDownRom();
+                                flashRoming();
+                            }
+                            if ( status == 0 ) {
+                                openRefresh();
+                                window.location.href = homeUrl;
+                            }
+                        }
+                    }
+                });
+                getStatus.fail(function(){
+                    getStatus = null;
+                    console.log( arguments );
+                });
+            }, 6 * 1000 );
+
+        },
+        // 自动升级包下载完成，执行刷写
+        flashDownRom = function() {
+            var requestData = {},
+                requestURL = '<%=luci.dispatcher.build_url("api", "xqsystem", "flash_permission")%>';
+
+            $.ajax({
+                url: requestURL,
+                data: requestData,
+                dataType: 'text'
+            });
+        },
+        // 刷写手动上传包
+        flashRom = function() {
+            var requestData = {},
+                requestURL = '<%=luci.dispatcher.build_url("api", "xqsystem", "flash_rom")%>';
+
+            $.ajax({
+                url: requestURL,
+                data: requestData,
+                dataType: 'text'
+            });
+        },
+        // 开始运行flash刷机
+        flashRoming = function() {
+            $( '#dldProgress' ).hide();
+            $( '#flashProgress .loading-text' ).html( '<%:小米路由器正在进行系统升级，大约需5-8分钟...%>' );
+            $( '#flashProgress' ).show();
+            window.setTimeout( function(){
+                openRefresh();
+                setTimeout( function() {
+                    window.location.href = homeUrl;
+                }, 100 );
+            } , 5 * 60 * 1000 );
+        },
+        // 取消自动升级包下载
+        cancelFlash = function() {
+            var url = '<%=luci.dispatcher.build_url("api", "xqsystem","cancel")%>';
+            $.getJSON( url, {}, function( rsp ) {
+                if ( rsp.code == 0 ) {
+                    openRefresh();
+                    setTimeout( function() {
+                        window.location.href = homeUrl;
+                    }, 100 );
+
+                } else {
+                    $.alert( rsp.msg );
+                }
+            });
+        },
+        stopRefresh = function() {
+            window.onbeforeunload = function() {
+              return "<%:正在进行系统升级，请不要离开页面%>";
+            }
+        },
+        openRefresh = function() {
+            window.onbeforeunload = null;
+        },
+        flashtype = (function(){
+            if ( /.*\?.*=.*/.test( document.URL ) ) {
+                return document.URL.split( '?' )[1].split( '=' )[1];
+            } else {
+                return '';
+            }
+        }());
+    if ( flashtype === 'download' ) {
+        stopRefresh();
+        downflash();
+    }
+    if ( flashtype === 'upload' ) {
+        stopRefresh();
+        flashRom();
+        flashRoming();
+        showPercent( 100 );
+    }
+
+    if ( !( /flashtype/.test( document.URL ) ) ) {
+        downStatus();
+        // $.alert( '<%:你当前无需进行系统升级，请不要访问此页面%>' );
+        // window.location.href = homeUrl;
+    }
+
+    // 取消升级
+    $( "#btnCancel" ).click(function( e ){
+        e.preventDefault();
+        cancelFlash();
+    });
+});
+</script>
+</body>
+</html>

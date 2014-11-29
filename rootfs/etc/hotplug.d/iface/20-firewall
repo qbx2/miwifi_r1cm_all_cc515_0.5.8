@@ -1,0 +1,21 @@
+#!/bin/sh
+logger -t "${0}-firewall[$$]" "HotPlugEvent: $ACTION of $INTERFACE ($DEVICE)"
+
+[ "$ACTION" = "ifup" ] || exit 0
+
+if [ "$INTERFACE" = "wan" ] ;then
+	nohup /usr/sbin/ntpsetclock 88888 log >/dev/null 2>&1 &
+	/usr/sbin/wan.monitor status mute
+	if [ $? -ne 0 ]
+	then
+		logger -t wan.monitor "HotPlugEvent: Try to start wan.monitor due to ifup of $INTERFACE ($DEVICE)"
+		/usr/sbin/wan.monitor start
+	fi
+fi
+
+/etc/init.d/firewall enabled || exit 0
+
+fw3 -q network "$INTERFACE" >/dev/null || exit 0
+
+logger -t firewall "HotPlugEvent: Reloading firewall due to ifup of $INTERFACE ($DEVICE)"
+fw3 -q reload

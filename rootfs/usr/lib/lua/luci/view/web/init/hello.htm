@@ -1,0 +1,95 @@
+<%
+local ver = require("xiaoqiang.XQVersion").webVersion
+local sys = require("xiaoqiang.util.XQSysUtil")
+if sys.getInitInfo() then
+    luci.http.redirect(luci.dispatcher.build_url())
+else
+    sys.setSysPasswordDefault()
+end
+%>
+<%include("web/inc/head")%>
+    <title><%:小米路由器%></title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link href="<%=resource%>/web/css/bc.css?v=<%=ver%>" rel="stylesheet">
+    <link href="<%=resource%>/web/css/guide.css?v=<%=ver%>" rel="stylesheet">
+</head>
+<body>
+<div id="guide-doc">
+    <div id="guide-hd">
+        <div class="mod-guide-hd">
+            <div class="icons"><img src="<%=resource%>/web/img/bg_guide_hd.png?v=<%=ver%>" height="96"></div>
+            <p><%:欢迎使用小米路由器mini%></p>
+        </div>
+    </div>
+    <div id="guide-bd">
+        <div class="mod-guide-welcome">
+            <p class="tit"><%:只需简单设置，开始全新智能路由器生活%></p>
+            <div class="start">
+                <p class="img"><img src="<%=resource%>/web/img/rt.jpg"></p>
+                <p class="agree"><label for="agree"> <input type="checkbox" name="agree" id="agree" checked="checked" autocomplete="off"> <span><%:已阅读并同意%><a target="_blank" href="<%=luci.dispatcher.build_url("web", "init", "agreement")%>"><%:《用户许可使用协议》%></a></span><span style="display:none;"><%:请先阅读%><a target="_blank" href="<%=luci.dispatcher.build_url("web", "init", "agreement")%>"><%:《用户许可使用协议》%></a><%:后选择是否同意%></span></label></p>
+                <a id="btnStart" href="#" class="btn btn-primary-disabled"><span><%:同意，继续%></span></a>
+            </div>
+        </div>
+    </div>
+</div>
+<%include("web/inc/g.js")%>
+<script>
+$(function(){
+
+    var elBtnStart = $( '#btnStart' ),
+        elAgree = $( '#agree' );
+
+    if ( elAgree.is( ':checked' ) ) {
+        elBtnStart[0].className = 'btn btn-primary';
+    }
+
+    elAgree.on( 'click', function( e ) {
+        if ( $(this).is( ':checked' ) ) {
+            elBtnStart[0].className = 'btn btn-primary';
+            $('.agree label span').hide().eq(0).show();
+        } else {
+            elBtnStart[0].className = 'btn btn-primary-disabled';
+            $('.agree label span').hide().eq(1).show();
+        }
+    });
+
+    elBtnStart.on( 'wait', function() {
+        this.className = 'btn btn-primary-disabled';
+        $('span', this).text('<%:处理中...%>');
+    });
+
+    elBtnStart.on( 'click', function(e) {
+        e.preventDefault();
+        if ( $( '#agree' ).prop( 'checked' ) ) {
+            var nonce = Encrypt.init(),
+                oldPwd = Encrypt.oldPwd( 'admin' ),
+                data = {
+                    username: 'admin',
+                    logtype: 2,
+                    password: oldPwd,
+                    nonce: nonce,
+                    init: 1
+                };
+
+            elBtnStart.trigger( 'wait' );
+            $.getJSON( '<%=luci.dispatcher.build_url("api", "xqsystem", "login")%>', data, function( rsp ) {
+                if ( rsp.code == 0 ) {
+                    window.location.href = rsp.url;
+                } else {
+                    window.location.reload();
+                }
+            });
+        }
+    });
+
+    // tag the first init
+    $.cookie('needguide', '1', {
+        path: '/',
+        expires: 7
+    });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2009-2012 OpenWrt.org
+
+START=21
+STOP=10
+
+export EXTRA_HELP="	status	Status the service"
+export EXTRA_COMMANDS="status"
+
+export HTTPDLINE="/usr/sbin/sysapihttpd.loader"
+export HTTPDFLAG="nginx: master process /usr/sbin/sysapihttpd -c /tmp/sysapihttpdconf/sysapihttpd.conf"
+
+export FCGIDLINE="/usr/bin/spawn-fcgi -s /tmp/fcgi-cgi.sock -u root -U nobody -C 0 -F 1 -P /var/run/fcgi-cgi.pid -- /usr/bin/fcgi-cgi -c 32"
+export FCGIDFLAG="/usr/bin/fcgi-cgi -c 32"
+export OOM_FLAG=0
+
+stop() {
+	#export command line for /usr/sbin/supervisord
+	export PROCLINE="${HTTPDLINE}"
+	export PROCFLAG="${HTTPDFLAG}"
+	/usr/sbin/supervisord stop
+	sleep 1
+	#export command line for /usr/sbin/supervisord
+	export PROCLINE="${FCGIDLINE}"
+	export PROCFLAG="${FCGIDFLAG}"
+	/usr/sbin/supervisord stop
+	return $?
+}
+start() {
+	#export command line for /usr/sbin/supervisord
+	export PROCLINE="${FCGIDLINE}"
+	export PROCFLAG="${FCGIDFLAG}"
+	export PROCNUM='1'
+	/usr/sbin/supervisord start
+
+	/usr/sbin/supervisord status >/dev/null 2>&1
+
+	if [ $? -ne 0 ]
+		then
+		echo "WARNING: fcgi-cgi start failed."
+	fi
+	
+	sleep 1
+	
+	rm -rf /tmp/uploadfiles/ && mkdir -p /tmp/uploadfiles/ && chmod 777 /tmp/uploadfiles/ && mkdir -p /data/sysapihttpd/log/ &&  mkdir -p /data/sysapihttpd/lock/ && touch /data/sysapihttpd/log/error.log && chmod -R 777 /data/sysapihttpd
+	if [ $? -ne 0 ]
+		then
+		echo "ERROR: chmod 777 /data/sysapihttpd/log/error.log failed."
+	fi
+	#export command line for /usr/sbin/supervisord
+	export PROCLINE="${HTTPDLINE}"
+	export PROCFLAG="${HTTPDFLAG}"
+	export PROCNUM='1'
+	/usr/sbin/supervisord start
+	return $?
+}
+restart() {
+	stop
+	sleep 1
+	start
+	return $?
+}
+shutdown() {
+	stop
+	return $?
+}
+status() {
+	#export command line for /usr/sbin/supervisord
+	export PROCLINE="${FCGIDLINE}"
+	export PROCFLAG="${FCGIDFLAG}"
+	/usr/sbin/supervisord status
+	fcgi=$?
+	export PROCLINE="${HTTPDLINE}"
+	export PROCFLAG="${HTTPDFLAG}"
+	/usr/sbin/supervisord status
+	test $? -eq 0 -a $fcgi -eq 0 && return 0
+	return 1
+}
+#

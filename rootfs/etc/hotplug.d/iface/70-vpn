@@ -1,0 +1,36 @@
+#!/bin/sh
+[ "$ACTION" = "ifup" ] && [ "$INTERFACE" = "lan" ] && {
+	. /lib/functions/network.sh
+	network_get_subnet subnet lan
+	ip route add to $(fix_subnet $subnet) dev br-lan table vpn
+}
+
+[ "$ACTION" = "ifdown" ] && [ "$INTERFACE" = "vpn" ] && {
+	if [ -f /etc/ppp/vpndown.sh ]; then
+		. /etc/ppp/vpndown.sh
+	fi
+	ip rule del table vpn
+	while [[ $? == 0 ]]; do
+		ip rule del table vpn
+	done
+}
+
+[ "$ACTION" = "ifup" ] && [ "$INTERFACE" = "vpn" ] && {
+	ip route add to 0/0 dev $DEVICE table vpn
+	if [ -f /etc/ppp/vpnup.sh ]; then
+		. /etc/ppp/vpnup.sh
+	fi
+	. /lib/functions/network.sh
+	network_get_subnet subnet lan
+	ip rule add from $(fix_subnet $subnet) table vpn
+
+	network_get_dnsserver dnsservers vpn
+	for dnsserver in $dnsservers; do
+		ip rule add to $dnsserver table vpn
+	done
+
+	network_get_dnsserver dnsservers wan
+	for dnsserver in $dnsservers; do
+		ip rule add to $dnsserver table vpn
+	done
+}

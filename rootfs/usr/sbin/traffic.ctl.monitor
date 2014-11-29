@@ -1,0 +1,993 @@
+#!/bin/sh
+#
+export LANG=C
+#
+. /lib/lib.scripthelper.sh
+#
+. /lib/lib.wan.monitor.sh
+#
+FLAGHOST='169.254.255.201'
+#
+getvtpid() {
+	vtpid=`ps w | grep 'vtund' | grep 'routevt' | grep -v grep | awk '{print $1}'`
+	echo $vtpid
+}
+#
+vtunclientctl(){
+	ctlop="$1"
+	test "$ctlop" = 'on' && ctlop="start"
+	test "$ctlop" = 'off' && ctlop="stop"
+	if [ "$ctlop" != 'start' -a "$ctlop" != 'stop' ]
+		then
+		ctlop="start"
+	fi
+	curvtpid=`getvtpid`
+	if [ "$ctlop" = 'start' ]
+		then
+		if [ -n "$curvtpid" ]
+			then
+			test "$2" != 'mute' && dlog "WARNING: vtun client already running: $curvtpid"
+			return 0
+		fi
+		/usr/sbin/vtundctl start
+		sleep 2
+		curvtpid=`getvtpid`
+		if [ -n "$curvtpid" ]
+			then
+			dlog "INFO: vtun client started: $curvtpid"
+			return 0
+		else
+			dlog "ERROR: vtun client start failed, check syslog for detail."
+			return 1
+		fi
+	else
+		if [ -z "$curvtpid" ]
+			then
+			test "$2" = '-v' && dlog "INFO: vtun client already stop."
+			return 0
+		fi
+		/usr/sbin/vtundctl stop
+		setlinkstat down vpn mute
+		pcurvtpid=$curvtpid
+		for wcnt in 1 2 3 4 5 6 7 8 9 0
+		do
+			curvtpid=`getvtpid`
+			test -z "$curvtpid" && break
+			sleep 1
+		done
+		curvtpid=`getvtpid`
+		if [ -z "$curvtpid" ]
+			then
+			test "$2" != 'mute' && dlog "INFO: vtun client $pcurvtpid stop ok."
+		else
+			dlog "ERROR: vtun client $curvtpid stop failed."
+		fi
+		return 0
+	fi
+}
+switchgateway(){
+	#
+	#try to set at less one gateway
+	#
+	#save current local gateway(eth) to metric 80
+	#save vpngateway(tap) to metric 100, if exist
+	#
+	local agw agwok bgw bgwok togw aethok bethok curgwlist allgws
+	#
+	agw="$1"
+	bgw="$2"
+	#dlog "DEBUG: switch gateway, start, $agw and $bgw ..."
+	test -z "$agw" && return 0
+	#
+	iplocalcheck "$agw"
+	agwok=$?
+	bgwok=1
+	if [ -n "$bgw" ]
+	then
+		iplocalcheck "$bgw";bgwok=$?
+	fi
+
+	#set to metric 80/100 and clean up unreachable gw
+
+	iplocalethercheck "$agw"
+	aethok=$?
+	bethok=1
+	if [ -n "$bgw" ]
+	then
+		iplocalethercheck "$bgw";bethok=$?
+	fi
+
+	for fcnt in 1 2 3 4 5 6 7 8 9 0
+	do
+		if [ $agwok -ne 0 ]
+			then
+			route del -net 0.0.0.0/0 gw $agw metric 80 2>/dev/null
+			route del -net 0.0.0.0/0 gw $agw metric 100 2>/dev/null
+			route del -net 0.0.0.0/0 gw $agw 2>/dev/null
+			#test $fcnt -eq 1 && dlog "DEBUG: switch gateway, remove gateway for $agw unreachable "
+		fi
+		if [ $bgwok -ne 0 -a -n "$bgw" ]
+			then
+			route del -net 0.0.0.0/0 gw $bgw metric 80 2>/dev/null
+			route del -net 0.0.0.0/0 gw $bgw metric 100 2>/dev/null
+			route del -net 0.0.0.0/0 gw $bgw 2>/dev/null
+			#test $fcnt -eq 1 && dlog "DEBUG: switch gateway, remove gateway for $bgw unreachable "
+		fi
+	done
+	#
+	islazy=0
+	allgws=`ip route list | grep '^default via ' | grep -v 'tap' | head -n 10| awk '{print $3}'`
+	if [ $agwok -ne 0 ]
+		then
+		dlog "WARNING: primary $agw unreachable, working in lazy mode."
+		allgws="$allgws $bgw"
+		islazy=1
+	else
+		allgws="$agw $allgws $bgw"
+	fi
+	gwsetok=0
+	togw=''
+	#dlog "DEBUG: switch gateway, check gw list: $allgws "
+	for togw in $allgws
+	do
+		iplocalcheck $togw
+		if [ $? -ne 0 ]
+			then
+			#dlog "DEBUG: $togw unreachable."
+			continue
+		fi
+		#setup
+		route add -net 0.0.0.0/0 gw $togw 2>/dev/null
+		isok=`route add -net 0.0.0.0/0 gw $togw 2>&1 | grep -c 'File exists'`
+		if [ $isok -eq 0 ]
+			then
+			dlog "ERROR: set default gateway $togw of ($allgws) failed, try next."
+		else
+			dlog "INFO: set default gateway $togw of ($agw $bgw) ok."
+			if [ "$togw" != "$bgw" -a -n "$bgw" ]
+			then
+				#dlog "DEBUG: switch gateway, remove $bgw ... "
+				route del -net 0.0.0.0/0 gw $bgw 2>/dev/null
+				route del -net 0.0.0.0/0 gw $bgw 2>/dev/null
+				route del -net 0.0.0.0/0 gw $bgw 2>/dev/null
+			fi
+			gwsetok=1
+			break
+		fi
+	done
+	if [ $gwsetok -eq 0 ]
+		then
+		dlog "ERROR: set default gateway to ($allgws) final failed."
+		return 1
+	fi
+	if [ $agwok -eq 0 ]
+		then
+		if [ $aethok -eq 0 ]
+			then
+			route add -net 0.0.0.0/0 gw $agw metric 80 2>/dev/null
+			#dlog "DEBUG: switch gateway, ether gw, route add -net 0.0.0.0/0 gw $agw metric 80 "
+		else
+			route add -net 0.0.0.0/0 gw $agw metric 100 2>/dev/null
+			#dlog "DEBUG: switch gateway, vpn gw, route add -net 0.0.0.0/0 gw $agw metric 100 "
+		fi
+	fi
+	if [ $bgwok -eq 0 -a -n "$bgw" ]
+		then
+		if [ $bethok -eq 0 ]
+			then
+			route add -net 0.0.0.0/0 gw $bgw metric 80 2>/dev/null
+			#dlog "DEBUG: switch gateway, ether gw, route add -net 0.0.0.0/0 gw $bgw metric 80 "
+		else
+			route add -net 0.0.0.0/0 gw $bgw metric 100 2>/dev/null
+			#dlog "DEBUG: switch gateway, vpn gw, route add -net 0.0.0.0/0 gw $bgw metric 100 "
+		fi
+	fi
+	#dlog "INFO: switchgateway, final ... "
+	#route -n | head -n 8 | while read logline
+	#do
+	#	dlog "$logline"
+	#done
+	if [ $islazy -ne 0 ]
+		then
+		return 1
+	else
+		return 0
+	fi
+}
+batchret(){
+	local checksum rcount errcnt
+	checksum="$1"
+	rcount="$2"
+	errcnt="$3"
+	test -z "$checksum" && return 0
+	mkdir -p /tmp/batchroute.ret
+	echo "$rcount $errcnt $checksum" > /tmp/batchroute.ret/${checksum}.tmp
+	#dlog "DEBUG: $checksum done, $rcount $errcnt "
+	return $?
+}
+batchroute(){
+	local errcnt isok routeop togw routelist errstring oneroute batchsum rcount checksum totalentry
+	errcnt=0
+	rcount=0
+	routeop="$1"
+	togw="$2"
+	checksum="$3"
+	routelist="$@"
+	test -z "$routeop" -o -z "$togw" -o -z "$checksum" && dlog "ERROR: invaild args: $@" && return 0
+	routelist="`echo $routelist| sed -e 's/^add //g'|sed -e 's/^del //g'|sed -e "s/^$togw //g"`"
+	routelist="${routelist:33:65535}"
+	#count
+	totalentry=0
+	for oneroute in $routelist
+	do
+		let totalentry=$totalentry+1
+	done
+	if [ "$routeop" != 'add' -a "$routeop" != 'del' ]
+		then
+		dlog "WARNING: unknow op $routeop => add"
+		routeop='add'
+	fi
+	batchsum=`echo "$routeop $togw $routelist" | md5sum|awk '{print $1}'`
+	if [ "$checksum" != "$batchsum" ]
+		then
+		#TODO: here, ERROR: add, gw 172.16.254.254, sum 1d0898adac60cff0c14901d0ac69bec9, checksum 06f161c067078fcf7973c3533547c215 mismatch, -net_172.16.0.0_netmask_255.255.0.0 -net_172.17.0.0_netmask_255.
+		dlog "ERROR: $routeop, gw $togw, sum $batchsum, checksum $checksum mismatch, $routelist"
+		dlog "INFO: got $batchsum vs $@"
+		batchret $checksum $totalentry $totalentry
+		return 1
+	fi
+	#dlog "DEBUG: $0, batchroute, $routeop, gw $togw, sum $batchsum, $routelist"
+	rcount=0
+	for oneroute in $routelist
+	do
+		if [ $errcnt -ge 5 ]
+			then
+			let errcnt=$errcnt+1
+			continue
+		fi
+		oneroute="`echo $oneroute|tr '_' ' '`"
+		route $routeop $oneroute gw $togw 2>/tmp/batchroute.${batchsum}.tmp
+		if [ $? -ne 0 ]
+			then
+			errstring=`cat /tmp/batchroute.${batchsum}.tmp 2>/dev/null`
+			if [ "$routeop" = 'add' ]
+				then
+				isok=`echo $errstring | grep -c 'File exists'`
+			else
+				isok=`echo $errstring | grep -c 'No such process'`
+			fi
+			if [ $isok -eq 0 ]
+				then
+				test $errcnt -le 2 && dlog "ERROR: sum $batchsum, route $routeop $oneroute gw $togw : $errstring"
+				let errcnt=$errcnt+1
+				if [ $errcnt -ge 5 ]
+					then
+					dlog "ERROR: sum $batchsum, too many erro $errcnt when route $routeop on $togw"
+				fi
+			else
+				let rcount=$rcount+1
+			fi
+		else
+			let rcount=$rcount+1
+		fi
+		rm -f /tmp/batchroute.${batchsum}.tmp
+	done
+	let errcnt=$totalentry-$rcount
+	batchret $checksum $rcount $errcnt
+	return $?
+}
+fastroute(){
+	local batchlenght checksum routelist totalroute totalerrcnt totalrcount fastsumlist fastbatchcnt oneroute togw commitgw
+	maxbatch=5
+	batchlenght=100
+	fastbatchcnt=0
+	totalroute=0
+	totalerrcnt=0
+	totalrcount=0
+	routeop="$1"
+	togw="$2"
+	checksum="ZzzZZzZzzzZSS"
+	routelist=""
+	#dlog "INFO: try to $routeop static route ..."
+	startts="`date +%s`"
+	if [ ! -s /etc/traffic.static.route.txt ]
+		then
+		dlog "INFO: fastroute, empty /etc/traffic.static.route.txt"
+		return 0
+	fi
+	#
+	test -s /tmp/traffic.route.env && . /tmp/traffic.route.env
+	#
+	if [ -z "$LOCALGW" -o -z "$VPNGW" ]
+		then
+		dlog "ERROR: fastroute, LOCALGW or VPNGW no exported."
+		return 1
+	fi
+	test -z "$routeop" -o -z "$togw" && dlog "ERROR: invaild arg for fastroute: $@" && return 1
+	test "$routeop" != 'add' -a "$routeop" != 'del' && dlog "ERROR: fastroute, unknow op $routeop"
+	if [ "$routeop" = 'add' ]
+		then
+		iplocalcheck $togw
+		if [ $? -ne 0 ]
+			then
+			dlog "ERROR: fastroute, route next host $togw unreachable."
+			return 1
+		fi
+	fi
+	#
+	currentbatchlen=0
+	totalroute=0
+
+	#check lock
+	rlockpid="`cat /tmp/traffic.fastroute.lock 2>/dev/null`"
+	if [ -n "$rlockpid" ]
+		then
+		kill -0 $rlockpid 2>/dev/null&& dlog "WARNING: fastroute, waiting up to 120 seconds for lock pid $rlockpid ..."
+		wcnt=0
+		while [ $wcnt -le 120 ]
+		do
+			rlockpid="`cat /tmp/traffic.fastroute.lock 2>/dev/null`"
+			kill -0 $rlockpid 2>/dev/null|| break
+			let wcnt=$wcnt+1
+			sleep 1
+		done
+		kill -0 $rlockpid 2>/dev/null&& dlog "WARNING: fastroute, waiting timeout after $wcnt seconds for lock pid $rlockpid ..."
+	fi
+	echo "$$" > /tmp/traffic.fastroute.lock
+	if [ $? -ne 0 ]
+		then
+		dlog "ERROR: fastroute, lock /tmp/traffic.fastroute.lock failed."
+		return 1
+	fi
+	rm -rf /tmp/batchroute.ret
+	#
+	tmpfile="/tmp/traffic.static.route.txt.$$.tmp"
+	cat /etc/traffic.static.route.txt | grep -v '^#' | tr ' ' '_' > $tmpfile
+	if [ $? -ne 0 ]
+		then
+		dlog "ERROR: fastroute, cleanup /etc/traffic.static.route.txt => $tmpfile failed."
+		return 1
+	fi
+	#
+	tmpcnt=`wc -l $tmpfile | awk '{print $1}'`
+	let batchlenght=$tmpcnt/$maxbatch
+	test $batchlenght -le 100 && batchlenght=100
+	#
+	dlog "INFO: $routeop $togw, total $tmpcnt, max batch $maxbatch, batch lenght $batchlenght ..."
+	#
+	totalroute=0
+	routelist=''
+	commitgw=''
+	currentbatchlen=0
+	while read rawoneroute
+	do
+		#oneroute=`echo $rawoneroute | grep -v '^#'`
+		oneroute="$rawoneroute"
+		if [ -z "$oneroute" ]
+			then
+			continue
+		fi
+		togw="$LOCALGW"
+		#-net_172.16.0.0_netmask_255.255.0.0_gw_VPNGW
+		echo "$oneroute" | grep -q '_gw_VPNGW'
+		if [ $? -eq 0 ]
+			then
+			togw="$VPNGW"
+			oneroute=`echo "$oneroute" | sed -e 's/_gw_VPNGW//'`
+			if [ -z "$oneroute" ]
+				then
+				dlog "ERROR: $rawoneroute // empty static route for VPN"
+				continue
+			fi
+			#dlog "DEBUG: _gw_VPNGW $togw raw $rawoneroute => $oneroute"
+		#else
+		#	dlog "DEBUG: no _gw_VPNGW raw $rawoneroute => $oneroute"
+		fi
+		if [ -z "$commitgw" ]
+			then
+			commitgw=$togw
+		fi
+		#check new batch
+		newbatch=0
+		if [ "$commitgw" != "$togw" -a -n "$routelist" ]
+			then
+			let fastbatchcnt=$fastbatchcnt+1
+			newbatch=1
+			#dlog "DEBUG: new batch#$fastbatchcnt for $commitgw => $togw , $currentbatchlen >= $batchlenght"
+		fi
+		if [ $newbatch -eq 0 -a $currentbatchlen -ge $batchlenght -a -n "$routelist" ]
+			then
+			let fastbatchcnt=$fastbatchcnt+1
+			newbatch=1
+			#dlog "DEBUG: new batch#$fastbatchcnt for $commitgw => $togw , $currentbatchlen >= $batchlenght"
+		fi
+		if [ $newbatch -ne 0 ]
+			then
+			islinkup 'vpn'
+			vpniswork=$?
+			#0 for down
+			if [ $vpniswork -eq 0 ]
+				then
+				dlog "ERROR: vpn is down, aborting ..."
+				rm -f /tmp/traffic.fastroute.lock
+				return 1
+			fi
+			#start one batch
+			checksum=`echo "$routeop $commitgw $routelist" | md5sum|awk '{print $1}'`
+			fastsumlist="$fastsumlist $checksum"
+			#batchroute $routeop $commitgw $checksum $routelist &
+			nohup $SCRIPTSELFT batchroute $routeop $commitgw $checksum $routelist >/dev/null 2>/dev/null &
+			#batchpid=$!
+			#dlog "DEBUG: new batch#$fastbatchcnt $batchpid lauched: len $currentbatchlen $routeop $commitgw $checksum RL "
+			#dlog "DEBUG: batchroute $batchpid: `ps w|grep $batchpid | grep -v grep`"
+			#
+			currentbatchlen=0
+			routelist=''
+		fi
+		#
+		commitgw=$togw
+		#
+		let currentbatchlen=$currentbatchlen+1
+		let totalroute=$totalroute+1
+		#
+		if [ -z "$routelist" ]
+			then
+			routelist="$oneroute"
+		else
+			routelist="$routelist $oneroute"
+		fi
+		#
+	done < $tmpfile
+	rm -f $tmpfile
+	#
+	if [ $currentbatchlen -ne 0 -a -n "$routelist" ]
+		then
+		#start one batch
+		let fastbatchcnt=$fastbatchcnt+1
+		#dlog "DEBUG: new batch#$fastbatchcnt for $commitgw => $togw , $currentbatchlen >= $batchlenght"
+		checksum=`echo "$routeop $commitgw $routelist" | md5sum|awk '{print $1}'`
+		fastsumlist="$fastsumlist $checksum"
+		nohup $SCRIPTSELFT batchroute $routeop $commitgw $checksum $routelist >/dev/null 2>/dev/null &
+		#batchpid=$!
+		#dlog "DEBUG: new batch#$fastbatchcnt $batchpid lauched: len $currentbatchlen $routeop $commitgw $checksum RL "
+	fi
+	#waiting for done
+	wcnt=0
+	retcnt=0
+	timelimit=360
+	dlog "INFO: waiting for $fastbatchcnt batchroute $totalroute entry finish, up to $timelimit seconds ..."
+	while [ $wcnt -le $timelimit ]
+	do
+		retcnt=$(ls -Al /tmp/batchroute.ret/* 2>/dev/null| wc -l)
+		test $retcnt -ge $fastbatchcnt && break
+		islinkup 'vpn'
+		vpniswork=$?
+		#0 for down
+		if [ $vpniswork -eq 0 ]
+			then
+			dlog "ERROR: vpn is down, aborting ..."
+			rm -rf /tmp/batchroute.ret/*
+			rm -f /tmp/traffic.fastroute.lock
+			return 1
+		fi
+		sleep 5
+		let wcnt=$wcnt+1
+	done
+	if [ $retcnt -lt $fastbatchcnt ]
+		then
+		dlog "WARNING: fastroute, waiting batchroute timeout after $timelimit seconds: $retcnt -lt $fastbatchcnt"
+	#else
+	#	dlog "INFO: fastroute, batchroute finish after $wcnt seconds: $retcnt -ge $fastbatchcnt"
+	fi
+	#summary
+	#totalroute
+	totalerrcnt=0
+	totalrcount=0
+	for oneretfile in $(ls -A /tmp/batchroute.ret/* 2>/dev/null)
+	do
+		oneretline=$(cat $oneretfile 2>/dev/null)
+		#$rcount $errcnt $checksum
+		rcount="`echo $oneretline|awk '{print $1}'`"
+		errcnt="`echo $oneretline|awk '{print $2}'`"
+		checksum="`echo $oneretline|awk '{print $3}'`"
+		if [ -z "$checksum" ]
+			then
+			test -n "$rcount" && dlog "INFO: fastroute, invaild batchroute result: $oneretline"
+			continue
+		fi
+		let totalerrcnt=$totalerrcnt+errcnt
+		let totalrcount=$totalrcount+rcount
+		exitcheck=0
+		for onesum in $fastsumlist
+		do
+			test "$onesum" = "$checksum" && exitcheck=1 && break
+		done
+		if [ $exitcheck -eq 0 ]
+			then
+			dlog "WARNING: fastroute, unknow/invaild batchroute checksum: $checksum"
+		fi
+	done
+	endts=`date +%s`
+	let espts=$endts-$startts
+	dlog "INFO: $routeop $togw $espts seconds, $totalroute, $totalrcount ok, $totalerrcnt error."
+	rm -f /tmp/traffic.fastroute.lock
+	if [ $totalerrcnt -ne 0 ]
+		then
+		return 1
+	else
+		return 0
+	fi
+}
+checkflagroute(){
+	#return 0 for route exist/ok
+	#ip route list 169.254.255.201
+	#169.254.255.201 via 192.168.20.1  metric 109
+	ip route list 169.254.255.201 2>/dev/null | grep -q "^$FLAGHOST "
+	return $?
+}
+setflagroute(){
+	local ctlop
+	ctlop="$1"
+	ismute="$2"
+	test -z "$ctlop" && return 1
+	case $ctlop in
+		on|start)
+			curocalgw=$(getdefaultrouteip)
+			if [ -z "$curocalgw" ]
+				then
+				dlog "ERROR: default gateway no found or is a vpn ip"
+				return 1
+			fi
+			setflagroute stop 1
+			ip route add $FLAGHOST via $curocalgw metric 109
+			checkflagroute
+			if [ $? -ne 0 ]
+				then
+				dlog "ERROR: setup flag route entry failed: $(ip route add $FLAGHOST via $curocalgw metric 109 2>&1)"
+				return 1
+			else
+				dlog "INFO: setup flag route $FLAGHOST gw $curocalgw metric 109 ok."
+				return 0
+			fi
+			;;
+		*)
+			checkflagroute
+			if [ $? -ne 0 ]
+				then
+				return 0
+			fi
+			for onedel in 1 2 3 4 5 6 7 8
+			do
+				ip route add $FLAGHOST via $curocalgw metric 109 2>&1 | grep -iq 'No such process'
+				test $? -eq 0 && break
+			done
+			test "$ismute" != '1' && dlog "INFO: remove flag route $FLAGHOST via $curocalgw metric 109 ok."
+			;;
+	esac
+	return 0
+}
+traffic_up_down(){
+	local ctlop
+	local dnsflag
+	local curflag
+	local exitcode
+	local lastopts espts
+	ctlop="$1"
+	dnsflag="$2"
+	curflag="$3"
+	if [ "$ctlop" != 'on' -a "$ctlop" != 'off' ]
+		then
+		ctlop="on"
+	fi
+	if [ "$curflag" = "$ctlop" ]
+		then
+		#already in this status
+		return 0
+	fi
+	if [ "$ctlop" = 'on' ]
+		then
+		operrdelay=$(arrfastget traffic_up_down delay-on-${dnsflag})
+		if [ -z "$operrdelay" ]
+			then
+			operrdelay=35
+		fi
+		if [ $operrdelay -le 35 ]
+			then
+			operrdelay=35
+		fi
+	else
+		operrdelay=35
+	fi
+	lastopts=$(arrfastget traffic_up_down ts-${ctlop}-${dnsflag}-${curflag})
+	nowts=$(date -u +%s)
+	test -z "$lastopts" && lastopts=0
+	let espts=$nowts-$lastopts
+	if [ $espts -le 30 ]
+		then
+		slog traffic_up_down-ts-${ctlop}-${dnsflag}-${curflag} dlog "WARNING: traffic control refuse to change for repeat too fast $espts <= 30 seconds."
+		return 1
+	else
+		slog traffic_up_down-ts-${ctlop}-${dnsflag}-${curflag} release
+	fi
+	exitcode=0
+	if [ "$ctlop" = 'off' ]
+		then
+		setflagroute $ctlop
+		test $? -ne 0 && exitcode=1
+		switchgateway $LOCALGW $VPNGW
+		if [ $? -ne 0 ]
+		then
+			dlog "ERROR: default gateway config $LOCALGW failed."
+			#do not care
+			#exitcode=1
+		else
+			dlog "INFO: default gateway config $LOCALGW ok."
+		fi
+	else
+		#set to on
+		exitcode=0
+		if [ $exitcode -eq 0 ]
+			then
+			#set flag first
+			setflagroute $ctlop
+			test $? -ne 0 && exitcode=1
+		fi
+		#dlog "DEBUG: traffic_up_down TRAFFIC_ALLVPN=$TRAFFIC_ALLVPN // $(cat $MONITORCFGFILE | grep 'TRAFFIC_ALLVPN')"
+		if [ "$TRAFFIC_ALLVPN" != 'on' ]
+			then
+			if [ $exitcode -eq 0 ]
+				then
+				fastroute add $VPNGW
+				if [ $? -ne 0 ]
+				then
+					dlog "ERROR: static route $ctlop failed."
+					exitcode=1
+				else
+					dlog "INFO: static route $ctlop ok."
+				fi
+			fi
+		fi
+		if [ $exitcode -eq 0 ]
+			then
+			if [ "$TRAFFIC_ALLVPN" = 'on' ]
+				then
+				dlog "NOTICE: turn all network traffic to vpn $VPNGW"
+				switchgateway $VPNGW
+				exitcode=$?
+			else
+				switchgateway $VPNGW $LOCALGW
+				exitcode=$?
+			fi
+			if [ $? -ne 0 ]
+			then
+				dlog "ERROR: default gateway config $VPNGW failed."
+				exitcode=1
+			else
+				dlog "INFO: default gateway config $VPNGW ok."
+			fi
+		fi
+		#
+		if [ $exitcode -ne 0 ]
+			then
+			dlog "WARNING: traffic control switch to off for error."
+			traffic_up_down off on on
+			let operrdelay=$operrdelay+35
+			if [ $operrdelay -ge 180 ]
+				then
+				operrdelay=180
+			fi
+			#TODO: test operrdelay
+			test $operrdelay -ge 35 && dlog "WARNING: sleep $operrdelay seconds for switch to on failed."
+			sleep $operrdelay
+		else
+			let operrdelay=$operrdelay-35
+			if [ $operrdelay -le 35 ]
+				then
+				operrdelay=35
+			fi
+		fi
+		arrfastset traffic_up_down delay-on-${dnsflag}
+	fi
+	if [ $exitcode -ne 0 ]
+	then
+		dlog "ERROR: traffic control switch $ctlop failed."
+	else
+		dlog "INFO: traffic control switch $ctlop ok."
+	fi
+	arrfastset traffic_up_down ts-${ctlop}-${dnsflag}-${curflag} $(date -u +%s)
+	return $exitcode
+}
+waitvpnup(){
+	#return 0 for down, 1 for up
+	timeout="$1"
+	test -z "$timeout" && return 0
+	#waiting for vtund start
+	vpniswork=0
+	waniswork=0
+	wcnt=0
+	waitok=0
+	dlog "INFO: waiting for vtund client, up to $timeout seconds."
+	while [ $wcnt -le $timeout ]
+	do
+		#ret 0 is down
+		islinkup 'wan'
+		waniswork=$?
+		islinkup 'vpn'
+		vpniswork=$?
+		if [ $waniswork -ne 0 -a $vpniswork -ne 0 -a -s /tmp/traffic.route.env ]
+			then
+			#all link is up
+			waitok=1
+			break
+		fi
+		curvtpid=`getvtpid`
+		#vtun is exited
+		test -z "$curvtpid" && break
+		let wcnt=$wcnt+1
+		sleep 1
+	done
+	delaymore=0
+	let delaymore=$timeout-$wcnt
+	if [ $waitok -eq 0 ]
+		then
+		curvtpid=`getvtpid`
+		if [ -z "$curvtpid" ]
+			then
+			dlog "WARNING: waiting for vtund client start failed, vtun client exited."
+		else
+			dlog "WARNING: waiting for vtund client timeout after $timeout seconds."
+		fi
+		test $delaymore -gt 0 && dlog "INFO: delay $delaymore seconds." && sleep $delaymore
+	fi
+	return $waitok
+}
+daemonstop(){
+	#
+	dlog "INFO: stop vtund client for monitor stopped."
+	vtunclientctl stop
+	VPNGW=''
+	traffic_up_down off on on
+	cmpgw=$(ip route list | grep '^default via '| head -n 1| awk '{print $3}')
+	NETGW=$(getdefaultrouteip)
+	test -n "$NETGW" -a "$cmpgw" != "$NETGW" && switchgateway $NETGW
+	return 0
+}
+#
+op=$1
+if [ "$op" = 'boot' ]
+	then
+	op='start'
+fi
+#
+if [ "$1" = 'batchroute' ]
+	then
+	routearg="`echo $ALLARGS|sed -e 's/^batchroute //'`"
+	SCRIPTTAG="$SCRIPTTAG/batchroute"
+	# "$routearg" will be failed
+	batchroute $routearg
+	exit $?
+fi
+#
+#run in daemon
+procdaemon mute
+#
+dlog "INFO: vpn static route monitor $op"
+#
+#init vars
+preid="ZzzZZzZzzzZ"
+oldvpngw=''
+vpniswork=0
+traffic_up='init'
+vpnstartwait=60
+#
+while [ : ]
+do
+	sleep 5
+	#set default
+	FOREIGN_CTL='on'
+	TRAFFIC_ALLVPN='off'
+	if [ -s "$MONITORCFGFILE" ]
+		then
+		. $MONITORCFGFILE
+	fi
+	export TRAFFIC_ALLVPN
+	#dlog "DEBUG: loop TRAFFIC_ALLVPN=$TRAFFIC_ALLVPN // $(cat $MONITORCFGFILE | grep 'TRAFFIC_ALLVPN')"
+	if [ "$FOREIGN_CTL" = 'off' ]
+		then
+		#
+		if [ "$traffic_up" != 'off' ]
+			then
+			dlog "WARNING: traffic control manual switch to off."
+			traffic_up_down "off" "$TRAFFIC_DNS" "$traffic_up"
+			traffic_up='off'
+		fi
+		if [ -n "$(getvtpid)" ]
+			then
+			dlog "INFO: stop vtund client for traffic control manual switch to off."
+			vtunclientctl stop
+		fi
+		continue
+	fi
+
+	if [ "$traffic_up" = 'on' ]
+		then
+		#
+		checkflagroute
+		if [ $? -ne 0 ]
+			then
+			dlog "ERROR: static route flag $FLAGHOST gone, try to restart vpn ..."
+			vtunclientctl stop
+			sleep 1
+			traffic_up_down "off" "$TRAFFIC_DNS" "$traffic_up"
+			traffic_up='off'
+			vtunclientctl start
+			waitvpnup $vpnstartwait
+			let vpnstartwait=$vpnstartwait+30
+			test $vpnstartwait -ge 300 && vpnstartwait=300
+			continue
+		fi
+	fi
+	islinkup 'wan'
+	waniswork=$?
+	if [ $waniswork -eq 0 ]
+		then
+		#wan is down
+		if [ "$traffic_up" != 'off' ]
+			then
+			dlog "WARNING: traffic control switch to off for wan is down."
+			traffic_up_down "off" "$TRAFFIC_DNS" "$traffic_up"
+			traffic_up='off'
+		fi
+		if [ -n "$(getvtpid)" ]
+			then
+			dlog "INFO: stop vtund client for wan is down."
+			vtunclientctl stop
+		fi
+		continue
+	fi
+	islinkup 'vpn'
+	vpniswork=$?
+	#0 for down
+	if [ $vpniswork -eq 0 ]
+		then
+		#vpn is down
+		test "$traffic_up" != 'init' && dlog "ERROR: vpn is down, try to restart ..."
+		vtunclientctl stop
+		sleep 1
+		test "$traffic_up" != 'init' && traffic_up_down "off" "$TRAFFIC_DNS" "$traffic_up"
+		traffic_up='off'
+		vtunclientctl start
+		waitvpnup $vpnstartwait
+		let vpnstartwait=$vpnstartwait+30
+		test $vpnstartwait -ge 300 && vpnstartwait=300
+		continue
+		#curocalgw=$(ip route list | grep '^default via ' | grep -v 'tap' | head -n 1| awk '{print $3}')
+	fi
+	if [ ! -s /tmp/traffic.route.env ]
+	then
+		dlog "ERROR: empty /tmp/traffic.route.env, try to restart ..."
+		vtunclientctl stop
+		sleep 1
+		traffic_up_down "off" "$TRAFFIC_DNS" "$traffic_up"
+		traffic_up='off'
+		vtunclientctl start
+		waitvpnup $vpnstartwait
+		let vpnstartwait=$vpnstartwait+30
+		test $vpnstartwait -ge 300 && vpnstartwait=300
+		continue
+	fi
+	. /tmp/traffic.route.env
+	if [ -z "$VPNINTERFACE" ]
+		then
+		dlog "WARNING: VPNINTERFACE no exported."
+		vtunclientctl stop
+		sleep 1
+		traffic_up_down "off" "$TRAFFIC_DNS" "$traffic_up"
+		traffic_up='off'
+		vtunclientctl start
+		waitvpnup $vpnstartwait
+		let vpnstartwait=$vpnstartwait+30
+		test $vpnstartwait -ge 300 && vpnstartwait=300
+		continue
+	fi
+	if [ -z "$VPNGW" ]
+		then
+		dlog "WARNING: VPNGW no exported."
+		vtunclientctl stop
+		sleep 1
+		traffic_up_down "off" "$TRAFFIC_DNS" "$traffic_up"
+		traffic_up='off'
+		vtunclientctl start
+		waitvpnup $vpnstartwait
+		let vpnstartwait=$vpnstartwait+30
+		test $vpnstartwait -ge 300 && vpnstartwait=300
+		continue
+	fi
+	if [ -z "$VPNSERVERIP" ]
+		then
+		dlog "WARNING: VPNSERVERIP no exported."
+		vtunclientctl stop
+		sleep 1
+		traffic_up_down "off" "$TRAFFIC_DNS" "$traffic_up"
+		traffic_up='off'
+		vtunclientctl start
+		waitvpnup $vpnstartwait
+		let vpnstartwait=$vpnstartwait+30
+		test $vpnstartwait -ge 300 && vpnstartwait=300
+		continue
+	fi
+	if [ -z "$SECUREDNSLIST" ]
+		then
+		dlog "WARNING: SECUREDNSLIST no exported."
+		vtunclientctl stop
+		sleep 1
+		traffic_up_down "off" "$TRAFFIC_DNS" "$traffic_up"
+		traffic_up='off'
+		vtunclientctl start
+		waitvpnup $vpnstartwait
+		let vpnstartwait=$vpnstartwait+30
+		test $vpnstartwait -ge 300 && vpnstartwait=300
+		continue
+	fi
+	vpnstartwait=60
+
+	export LOCALGW VPNINTERFACE VPNGW VPNSERVERIP SECUREDNSLIST
+
+	envid=`md5sum /tmp/traffic.route.env|awk '{print $1}'`
+	if [ "$preid" != "$envid" ]
+		then
+		#new env, setup new
+		#if turn on failed, will re-try in next round
+		if [ -n "$oldvpngw" -a "$oldvpngw" != "$VPNGW" ]
+			then
+			dlog "INFO: remove old ($oldvpngw) static route for new ($VPNGW) network env ..."
+			fastroute del $oldvpngw || dlog "WARNING: remove old ($oldvpngw) static route for new ($VPNGW) network env failed."
+		fi
+		oldvpngw="$VPNGW"
+		#force on
+		dlog "INFO: set static route for new network env ..."
+		traffic_up_down "on" "$TRAFFIC_DNS" "off"
+		if [ $? -ne 0 ]
+			then
+			traffic_up='off'
+		else
+			traffic_up='on'
+		fi
+		preid="$envid"
+		continue
+	fi
+	if [ "$traffic_up" = 'off' ]
+		then
+		if [ -n "$oldvpngw" -a "$oldvpngw" != "$VPNGW" ]
+			then
+			dlog "INFO: remove old ($oldvpngw) static route for new ($VPNGW) network env ..."
+			fastroute del $oldvpngw || dlog "WARNING: remove old ($oldvpngw) static route for new ($VPNGW) network env failed."
+		fi
+		oldvpngw="$VPNGW"
+		#
+		lastopts=$(arrfastget traffic_up_down traffic_new-on)
+		nowts=$(date -u +%s)
+		test -z "$lastopts" && lastopts=0
+		let espts=$nowts-$lastopts
+		if [ $espts -le 30 ]
+			then
+			slog traffic_new-on dlog "WARNING: traffic control refuse to turn on for repeat too fast $espts <= 30 seconds."
+			continue
+		else
+			slog traffic_new-on release
+		fi
+		#
+		#if turn on failed, will re-try in next round
+		dlog "INFO: set static route for ref ip check ok ..."
+		traffic_up_down "on" "$TRAFFIC_DNS" "off"
+		if [ $? -ne 0 ]
+			then
+			traffic_up='off'
+		else
+			traffic_up='on'
+		fi
+		arrfastset traffic_up_down traffic_new-on $(date -u +%s)
+	fi
+done
+exit 0
+#

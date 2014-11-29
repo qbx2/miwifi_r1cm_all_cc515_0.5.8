@@ -1,0 +1,743 @@
+<%
+    local ver = require("xiaoqiang.XQVersion").webVersion
+    local remote_addr = luci.http.getenv("REMOTE_ADDR")
+    local mac = luci.sys.net.ip4mac(remote_addr)
+%>
+<!--[if lt IE 7]>
+<script>
+try{ document.execCommand("BackgroundImageCache",false,true);} catch(e){}
+</script>
+<![endif]-->
+<%include("web/inc/i18n.js")%>
+<script src="/js/jquery-1.8.3.js?v=<%=ver%>"></script>
+<script src="/js/qwrap.js?v=<%=ver%>"></script>
+<script src="/js/crypto-js/rollups/sha1.js?v=<%=ver%>"></script>
+<script src="/js/crypto-js/rollups/aes.js?v=<%=ver%>"></script>
+<script src="/js/validate.js?v=<%=ver%>"></script>
+<script src="/js/bootstrap-tooltip.js?v=<%=ver%>"></script>
+<script src="<%=resource%>/web/js/selectbeautify.js?v=<%=ver%>"></script>
+<script src="<%=resource%>/web/js/jquery.dialog.js?v=<%=ver%>"></script>
+<script src="<%=resource%>/web/js/jquery.cookie.js?v=<%=ver%>"></script>
+<script>
+if ( !window.console ) {
+    window.console = {
+        log: function(){}
+    };
+}
+/*
+ * jQuery Tiny Pub/Sub
+ * https://github.com/cowboy/jquery-tiny-pubsub
+ *
+ * Copyright (c) 2013 "Cowboy" Ben Alman
+ * Licensed under the MIT license.
+ */
+
+(function( $ ) {
+
+    var o = $( {} );
+
+    $.sub = function() {
+        o.on.apply( o, arguments );
+    };
+
+    $.unsub = function() {
+        o.off.apply( o, arguments );
+    };
+
+    $.pub = function() {
+        o.trigger.apply( o, arguments );
+    };
+
+}( jQuery ));
+
+var Encrypt = {
+    key: 'a2ffa5c9be07488bbb04a3a47d3c5f6a',
+    iv: '64175472480004614961023454661220',
+    nonce: null,
+    init: function(){
+        var nonce = this.nonceCreat();
+        this.nonce = nonce;
+        return this.nonce;
+    },
+    nonceCreat: function(){
+        var type = 0;
+        var deviceId = '<%=mac%>';
+        var time = Math.floor(new Date().getTime() / 1000);
+        var random = Math.floor(Math.random() * 10000);
+        return [type, deviceId, time, random].join('_');
+    },
+    oldPwd : function(pwd){
+        return CryptoJS.SHA1(this.nonce + CryptoJS.SHA1(pwd + this.key).toString()).toString();
+    },
+    newPwd: function(pwd, newpwd){
+        var key = CryptoJS.SHA1(pwd + this.key).toString();
+        key = CryptoJS.enc.Hex.parse(key).toString();
+        key = key.substr(0, 32);
+        key = CryptoJS.enc.Hex.parse(key);
+        var password = CryptoJS.SHA1(newpwd + this.key).toString();
+        var iv = CryptoJS.enc.Hex.parse(this.iv);
+        var aes = CryptoJS.AES.encrypt(
+                password,
+                key,
+                {iv: iv, mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }
+            ).toString();
+        return aes;
+    }
+};
+
+var pingRouter = function( on, off, ip ){
+    var online = on || function(){},
+        offline = off || function(){},
+        host = ip || location.host,
+        imgUrl = 'http://' + host + '/img/ping.gif',
+        time = 5000,
+        timecounter = 0,
+        wait = function(){
+            console.log('pingRouter:wait');
+            offline();
+        },
+        done = function(){
+            console.log('pingRouter:done');
+            window.clearInterval( timer );
+            online();
+        },
+        loadImg = function( onload, onerror ){
+            var img = new Image();
+            img.onload = onload;
+            img.onerror = onerror;
+            img.src = imgUrl+'?' + (+new Date());
+        },
+        timer = window.setInterval(function() {
+
+            if ( 'onLine' in navigator ) {
+                if ( navigator.onLine ) {
+                    loadImg(
+                        function(){
+                            done();
+                        }, function(){
+                            wait();
+                        }
+                    );
+                } else {
+                    wait();
+                }
+            }else{
+                loadImg(function(){
+                        done();
+                    }, function(){
+                        wait();
+                });
+            }
+        }, time );
+};
+
+var rebootWait = function ( opt ) {
+    var action = opt.action,
+        ip = opt.lanIp || window.location.host,
+        refresh = opt.refresh || false,
+        tStart = ( +new Date() ),
+        tUse,
+        dlgRebootWait = $.dialog({
+            title : '<%:重启中...%>',
+            cancel: false,
+            width: 400,
+            content : action + '<%:操作生效，等待设备重启...%>'
+        }).lock(),
+        online = function(){
+            dlgRebootWait.content( '<%:操作生效,重启成功！%>' ).time( 3*1000 );
+            if( refresh ){
+                window.setTimeout( 'window.top.location.href="http://'+ip+'";',3000 );
+            }
+        },
+        offline = function(){
+            tUse = Math.round( ( ( +new Date() ) - tStart ) / 1000 );
+            if ( tUse > 150 ) {
+                dlgRebootWait.content( '<%:自动连接路由器失败，请检查无线或者网线是否连接正确。%>' );
+                return;
+            }
+            dlgRebootWait.content( action + '<%:, 等待自动跳转... 用时{$time}秒%>'.tmpl({time: tUse}) );
+        };
+
+    window.setTimeout( function(){
+        pingRouter( online, offline, ip );
+    }, 1000 * 15 );
+};
+
+(function( $ ){
+
+    function formInit() {
+        var clsInput = 'form-item form-item-input',
+            clsEmpty = 'form-item form-item-empty',
+            clsDisabled = 'form-item-disabled',
+            clsError = 'form-item-err',
+            clsPassword = 'form-item-pwd';
+
+        $( '.form-item input' ).each(function(){
+            var me = this,
+                $me = $( me ),
+                parent = $( me.parentNode.parentNode ),
+                label = parent.find( '.k' ),
+                offsetX = $me.position().left;
+            if ( !( this.type == 'text' || this.type == 'password' ) ) {
+                return;
+            }
+            // some input do not need init
+            if ($me.hasClass('no-init')) {
+                return;
+            }
+            if ( me.value !=='' ) {
+                parent[0].className = clsInput;
+            } else {
+                parent[0].className = clsEmpty;
+                if ( offsetX > 0 ) {
+                    label.css({ 'left': offsetX + 10 });
+                }
+            }
+            if ( me.disabled ) {
+                parent.addClass( clsDisabled );
+            }
+            if ( $me.attr('data-type') === 'password' ) {
+                parent.addClass( clsPassword );
+                parent.append( '<i class="bt-showpwd bt-showpwd-off"></i>' );
+            }
+
+            label.on( 'click', function(e){
+                try {
+                    me.focus();
+                } catch ( ex ) {}
+            });
+
+        });
+
+        function addInputEvent() {
+            $( '.form-item input' )
+                .on( 'focus', function(){
+                    if ( !( this.type == 'text' || this.type == 'password' ) ) {
+                        return;
+                    }
+                    var me = $( this ),
+                        parent = $( this.parentNode.parentNode ),
+                        label = parent.find( '.k' ),
+                        t = parent.find( '.t' ),
+                        classname;
+                    if (me.hasClass('no-init')) {
+                        return;
+                    }
+                    if ( parent.hasClass( clsPassword ) ) {
+                        classname = clsInput + ' ' + clsPassword;
+                    } else {
+                        classname = clsInput;
+                    }
+                    if ( parent.hasClass( clsError ) ) {
+                        t.hide();
+                    }
+                    label.css({ 'left': 'auto' });
+                    label.hide();
+                    parent[0].className = classname;
+                })
+                .on( 'blur', function(){
+                    var me = this,
+                        $me = $( me ),
+                        parent = $( me.parentNode.parentNode ),
+                        classname,
+                        label = parent.find( '.k' ),
+                        offsetX = $me.position().left;
+                    if ( !( this.type == 'text' || this.type == 'password' ) ) {
+                        return;
+                    }
+                    if ($(this).hasClass('no-init')) {
+                        return;
+                    }
+                    label.show();
+                    if ( me.value == '' ) {
+                        if ( parent.hasClass( clsPassword ) ) {
+                            classname = clsEmpty + ' ' + clsPassword;
+                        } else {
+                            classname = clsEmpty;
+                        }
+                        if ( offsetX > 0 ) {
+                            label.css({ 'left': offsetX + 10 });
+                        } else {
+                            label.css({ 'left': 12 });
+                        }
+                        parent[0].className = classname;
+                    }
+                });
+        };
+
+        function delInputEvent() {
+            $( '.form-item input' ).off( 'focus' );
+            $( '.form-item input' ).off( 'blur' );
+        };
+        // del password event
+        $( 'body' ).undelegate( '.bt-showpwd', 'click' );
+        $( 'body' ).delegate( '.bt-showpwd', 'click', function(e) {
+            console.log( 'showpwd' );
+            var me = this,
+                meclass = 'bt-showpwd',
+                parent = this.parentNode,
+                $input = $( 'input', parent ),
+                $inputwrap = $( '.v', parent ),
+                input = $input[0],
+                iptvalue = $input.val(),
+                ipttype = $input.attr( 'type' ),
+                iptname = $input.attr( 'name' ),
+                iptid = $input.attr( 'id' ),
+                iptclass = input.className,
+                $parent = $(parent),
+                newinput,
+                tpl = '<input type="{$ipttype}" value="{$iptvalue}" class="{$iptclass}" name="{$iptname}">';
+
+            if ( ipttype === 'password') {
+                newinput = tpl.tmpl({
+                    iptname: iptname,
+                    iptclass: iptclass,
+                    ipttype: 'text',
+                    iptid: iptid,
+                    iptvalue: StringH.encode4Html( iptvalue )
+                });
+                me.className = meclass + ' bt-showpwd-on';
+            } else {
+                newinput = tpl.tmpl({
+                    iptname: iptname,
+                    iptclass: iptclass,
+                    ipttype: 'password',
+                    iptid: iptid,
+                    iptvalue: StringH.encode4Html( iptvalue )
+                });
+                me.className = meclass + ' bt-showpwd-off';
+            }
+
+            $inputwrap.html( newinput );
+
+            setTimeout( function() {
+                delInputEvent();
+                addInputEvent();
+            }, 0 );
+        });
+
+
+
+        addInputEvent();
+    }
+
+    $.formInit = formInit;
+
+})(jQuery);
+
+/**
+* byte format
+*/
+function byteFormat(number, precision, isarray){
+    var val,
+        label,
+        ret;
+    precision = precision || 100,
+    isarray = isarray || false;
+    if (number > 1024 * 1024 * 1024) {
+        val = Math.floor( number / 1024 / 1024 / 1024 * precision ) / precision;
+        label = 'GB';
+    } else if (number > 1024 * 1024 && number < 1024 * 1024 * 1024){
+        val = Math.floor( number / 1024 / 1024 * precision ) / precision;
+        label = 'MB';
+    }else{
+        val = Math.floor( number / 1024 * precision ) / precision;
+        label = 'KB';
+    }
+
+    if (isarray) {
+        ret = [val, label];
+    }else{
+        ret = val + label;
+    }
+
+    return ret;
+}
+
+
+function secondToHour(time){
+    var pint = function(num){
+            return parseInt(num, 10);
+        },
+        hour = pint(time / 3600.0),
+        minute = pint((parseFloat(time / 3600.0) - hour) * 60),
+        second = pint(time) - hour * 3600 - minute * 60,
+        format = hour + '<%:小时%>' + minute + '<%:分%>' + second + '<%:秒%>';
+    return format;
+}
+
+function secondToDate(second) {
+    var time = parseFloat(second),
+        pint = function(num){
+            return parseInt(num, 10);
+        },
+        day;
+    if (time !== null && time !== "") {
+        if (time > 60 && time < 60 * 60) {
+            time = pint(time / 60.0) + '<%:分%>' + pint((parseFloat(time / 60.0) - pint(time / 60.0, 10)) * 60) + '<%:秒%>';
+        }
+        else if (time >= 60 * 60 && time < 60 * 60 * 24) {
+            time = secondToHour(time);
+        }else if (time >= 24* 60 * 60 ) {
+            day = pint(time  / (3600.0 * 24) );
+            time = time - (day * 3600 * 24);
+            time =  day + '<%:天 %>' + secondToHour(time);
+        }
+        else {
+            time = pint(time) + '<%:秒%>';
+        }
+    }
+    return time;
+}
+
+/**
+* placeholder
+*/
+(function( $ ){
+    function placeholder(){
+        var isInputSupported = 'placeholder' in document.createElement('input'),
+            isTextareaSupported = 'placeholder' in document.createElement('textarea'),
+            placeHolder_idx = 100000,
+            g = function(id){
+                return document.getElementById(id);
+            };
+
+        if(isInputSupported || isTextareaSupported){
+            return;
+        }
+        //模拟placeholder
+        $('[placeholder]').each(function(){
+            var el = this;
+            var __placeholderTimer = null;
+            var placeHolderElId = 'placeHolder-' + placeHolder_idx++;
+            el.setAttribute('placeHolderEl', placeHolderElId);
+            el.parentNode.style.position = 'relative';
+            var position = $(el).position();
+            var holderVal = $(el).attr('placeholder');
+            var inputPaddingTop = $(el).css('padding-top');
+            var inputBorderTop = $(el).css('border-top-width');
+            var inputPaddingLeft = $(el).css('padding-left');
+            var inputFontSize = $(el).css('font-size');
+            var elPlaceHolder = $('<span style="color:#999; font-size:16px; padding: 9px 4px; position:absolute; display:none;"></span>');
+            elPlaceHolder.css({
+                left: position.left + 1,
+                top: position.top + 1,
+                'padding-top': inputPaddingTop + inputBorderTop,
+                'padding-left': inputPaddingLeft,
+                'font-size': inputFontSize
+            });
+            elPlaceHolder.html(holderVal);
+            elPlaceHolder.attr('id',placeHolderElId);
+            el.parentNode.insertBefore(elPlaceHolder[0], el);
+
+
+            if (el.value =='') {
+                elPlaceHolder.show();
+            }
+
+            elPlaceHolder.on('click', function(e){
+                try {
+                    el.focus();
+                } catch (ex) {}
+            });
+
+            $(el)
+            .on('keydown', function(e){
+                var oldval = $(this).val();
+                oldval = $.trim(oldval);
+                var placeHolderEl = $(this).attr('placeHolderEl');
+                $(g(placeHolderEl)).hide();
+            })
+            .on('blur', function(e){
+                var oldval;
+                var that = $(this);
+                var placeHolderEl = $(this).attr('placeHolderEl');
+
+                clearTimeout(__placeholderTimer);
+                __placeholderTimer = setTimeout(function() { //在360浏览器下，autocomplete会先blur之后N百毫秒之后再change
+                    oldval = that.val();
+                    oldval = $.trim(oldval);
+                    if(oldval === ''){
+                        $(g(placeHolderEl)).show();
+                    }
+                }, 600);
+            });
+        });
+    }
+    $.placeholder = placeholder;
+})( jQuery );
+
+(function( $ ){
+    function pint(num){
+        return parseInt(num, 10);
+    }
+
+    function secondToHour(time){
+        var hour = pint(time / 3600.0),
+            minute = pint((parseFloat(time / 3600.0) - hour) * 60),
+            second = pint(time) - hour * 3600 - minute * 60,
+            format = hour + '<%:小时%>' + minute + '<%:分%>' + second + '<%:秒%>';
+        return format;
+    }
+
+    function secondToDate(second) {
+        var time = parseFloat(second),
+            day;
+        if (time !== null && time !== "") {
+            if (time > 60 && time < 60 * 60) {
+                time = pint(time / 60.0) + '<%:分%>' + pint((parseFloat(time / 60.0) - pint(time / 60.0, 10)) * 60) + '<%:秒%>';
+            }
+            else if (time >= 60 * 60 && time < 60 * 60 * 24) {
+                time = secondToHour(time);
+            }else if (time >= 24* 60 * 60 ) {
+                day = pint(time  / (3600.0 * 24) );
+                time = time - (day * 3600 * 24);
+                time =  day + '<%:天%>' + secondToHour(time);
+            }
+            else {
+                time = pint(time) + '<%:秒%>';
+            }
+        }
+        return time;
+    }
+
+    function secondToDate2(second) {
+        var time = parseFloat(second),
+            num = 0,
+            unit = '<%:天%>';
+        console.log( second, time );
+        if (!isNaN(time)) {
+            if (time > 60 && time < 60 * 60) {
+                num = Math.floor(time / 60.0);
+                unit = '<%:分钟%>';
+            } else if (time >= 60 * 60 && time < 60 * 60 * 24) {
+                num = Math.floor(time / 3600.0);
+                unit = '<%:小时%>'
+            } else if (time >= 24 * 60 * 60 ) {
+                num = Math.floor( time  / (3600.0 * 24) );
+                unit =  '<%:天%>';
+            } else {
+                num = Math.floor(time);
+                unit = '<%:秒%>';
+            }
+        }
+        return {
+            num: num,
+            unit: unit
+        };
+    }
+
+    $.secondToHour = secondToHour;
+    $.secondToDate = secondToDate;
+    $.secondToDate2 = secondToDate2;
+})( jQuery );
+
+
+$( document ).ajaxSuccess( function( event, xhr, settings ) {
+    var rsp = xhr.responseText;
+    rsp = $.parseJSON( rsp );
+    console.log(event, xhr, settings);
+    var ignore = [
+        'api\/xqsystem\/login'
+    ];
+    for (var i = 0; i < ignore.length; i++) {
+        var ignoreTest = new RegExp(ignore[i]);
+        console.log( ignoreTest );
+        if ( ignoreTest.test( settings.url ) ) {
+            return;
+        }
+    }
+    if ( rsp.code === 401) {
+        document.location.reload( true );
+    }
+} );
+
+$.sub( 'wait', function( evt, data ){
+    var selector = data.id;
+    if ( !$.waitStatus) {
+        $.waitStatus = {};
+    }
+    $.waitStatus[selector] = $( selector ).text();
+    $( selector ).addClass('btn-primary-disabled').prop( 'disabled' , true ).find('span').text( '<%:处理中%>...' );
+} );
+
+$.sub( 'done', function( evt, data ){
+    var selector = data.id,
+        text = $.waitStatus[selector];
+    $( selector ).removeClass('btn-primary-disabled').prop( 'disabled' , false ).find('span').text( text );
+} );
+
+$.sub( 'loading:start', function(){
+    if ( !$.loadingStatus) {
+        $.loadingStatus = {};
+    }
+    var tplMask = '<div class="panel-mask" style="position:fixed;left:0;top:0;style:none;"></div>',
+    tplLoading = ''
+        +'<div class="panel-loading" style="style:none;">'
+        +   '<img src="/img/loading2.gif">'
+        +'</div>',
+    $mask = $( tplMask ),
+    $loading = $( tplLoading ),
+    zIndex = 10000;
+    $mask.css({
+        'z-index': zIndex,
+        width: $(window).width() + 'px',
+        height: $(window).height() + 'px'
+    });
+    $loading.css({'z-index': zIndex + 1});
+    $mask.appendTo( document.body );
+    $loading.appendTo( document.body );
+    $mask.show();
+    $loading.show();
+    $.loadingStatus.loading = $loading;
+    $.loadingStatus.mask = $mask;
+} );
+
+$.sub( 'loading:stop', function(){
+    $.loadingStatus.loading.remove();
+    $.loadingStatus.mask.remove();
+});
+
+// dialog block loading
+(function( $ ){
+    $.loadingDialog = function( config ){
+        var mix = ObjectH.mix,
+            _config = config || {
+                title: '',
+                content: ''
+            },
+            conf = mix( _config, {
+                width: 400,
+                padding:'40px',
+                title: config.title,
+                content: '<p style="padding-bottom:30px;">{$content}</p><div class="loading-bar"></div>'.tmpl({content: config.content}),
+                cancel: false
+            }, true ),
+            dialog = $.dialog( conf );
+
+        var oldcontent = dialog.content;
+        dialog.content = function( cont ){
+            var _cont = '<p style="padding-bottom:30px;">{$content}</p><div class="loading-bar"></div>'.tmpl({content: cont});
+            oldcontent.call( dialog, _cont);
+        };
+        return dialog;
+    }
+})(jQuery);
+
+// dialog alert
+(function( $ ){
+    $.alert = function( content, ok ){
+        ok = ok || function(){};
+        return $.dialog({
+            width: 400,
+            padding:'40px',
+            title: '<%:提示信息%>',
+            content: content,
+            ok: ok,
+            cancel: false
+        });
+    }
+})(jQuery);
+
+// dialog confirm
+(function( $ ){
+    $.confirm = function( content, ok, cancel ){
+        var _cancel = cancel || function(){};
+        return $.dialog({
+            width: 400,
+            padding:'40px 20px',
+            title: '<%:确认信息%>',
+            content: content,
+            ok: ok,
+            cancel: _cancel
+        });
+    }
+})(jQuery);
+
+// wechat code dialog
+$(function(){
+    $( '#wechatcode' ).click(function( e ){
+        e.preventDefault();
+        var $this = $( this ),
+            href = $this.attr( 'href' );
+        $.dialog({
+            title: '<%:官方微信%>',
+            content: '<img width="200" src="'+ href +'">',
+            width: 250,
+            lock: true
+        });
+    });
+});
+
+// throttle and debounce
+(function( $ ){
+    var _ = {};
+    _.now = function(){
+        return new Date().getTime();
+    };
+    var throttle = function(func, wait, options) {
+        var context, args, result;
+        var timeout = null;
+        var previous = 0;
+        options || (options = {});
+        var later = function() {
+            previous = options.leading === false ? 0 : _.now();
+            timeout = null;
+            result = func.apply(context, args);
+            context = args = null;
+        };
+        return function() {
+            var now = _.now();
+            if (!previous && options.leading === false) previous = now;
+            var remaining = wait - (now - previous);
+            context = this;
+            args = arguments;
+            if (remaining <= 0) {
+                clearTimeout(timeout);
+                timeout = null;
+                previous = now;
+                result = func.apply(context, args);
+                context = args = null;
+            } else if (!timeout && options.trailing !== false) {
+                timeout = setTimeout(later, remaining);
+            }
+            return result;
+        };
+    };
+
+    var debounce = function(func, wait, immediate) {
+        var timeout, args, context, timestamp, result;
+
+        var later = function() {
+            var last = _.now() - timestamp;
+            if (last < wait) {
+                timeout = setTimeout(later, wait - last);
+            } else {
+                timeout = null;
+                if (!immediate) {
+                    result = func.apply(context, args);
+                    context = args = null;
+                }
+            }
+        };
+
+        return function() {
+            context = this;
+            args = arguments;
+            timestamp = _.now();
+            var callNow = immediate && !timeout;
+            if (!timeout) {
+                timeout = setTimeout(later, wait);
+            }
+            if (callNow) {
+                result = func.apply(context, args);
+                context = args = null;
+            }
+            return result;
+        };
+    };
+
+    $.throttle = throttle;
+    $.debounce = debounce;
+})( jQuery );
+</script>

@@ -1,0 +1,94 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2009-2012 OpenWrt.org
+
+#/usr/sbin/tftpupgrade
+
+#after /etc/init.d/boot
+START=03
+STOP=01
+
+export LOGTAG='post-system-up-down'
+
+conlog(){
+	msg="$@"
+	test -z "$msg" && return 0
+	DATE="`date`"
+	/usr/bin/logger -t "${LOGTAG}[${$}]" "$msg"
+	echo "$DATE ${LOGTAG}[${$}]: $msg" >> /dev/console 2>/dev/null
+	return 0
+}
+pipelog(){
+	local oneline
+	while read oneline
+	do
+		conlog "$oneline"
+	done
+}
+#
+start() {
+	#
+	export LOGTAG='pre-system-up'
+	#
+	hwmodel="$(nvram get model)"
+	test -z "$hwmodel" && hwmodel="unknown"
+	ARCH=$(uname -m)
+	conlog " * "
+	conlog " ******* $hwmodel/$ARCH ******* "
+	#
+	echo "$ARCH" | grep -q 'mips'
+	if [ $? -eq 0 ]
+		then
+		return 0
+	fi
+	#
+	if [ "$(uci get xiaoqiang.common.INITTED 2>/dev/null)" != 'YES' ]
+		then
+		if [ "$(nvram get TFTP_SKIP_WEBINIT)" = 'true' ]
+			then
+			uci set xiaoqiang.common='core'
+			uci set xiaoqiang.common.INITTED='YES'
+			uci commit xiaoqiang.common.INITTED
+			/usr/sbin/firewall.webinitrdr stop
+			conlog "INFO: web initial redirect disabled for tftpboot."
+		else
+			conlog "INFO: device no initialed."
+		fi
+	else
+		conlog "INFO: device already initialed."
+	fi
+	flag_tftp_bootup="$(nvram get flag_tftp_bootup)"
+	flag_tftp_booted="$(nvram get flag_tftp_booted)"
+	if [ "$flag_tftp_booted" != 'true' -o "$flag_tftp_bootup" != 'on' ]
+		then
+		conlog " ******* NORMAL BOOT ******* "
+		return 0
+	fi
+	conlog " * "
+	conlog " ******* TFTP BOOT ******* "
+	conlog " * "
+	return 0
+}
+
+restart() {
+	stop
+	sleep 1
+	start
+	return $?
+}
+
+shutdown() {
+	stop
+	return $?
+}
+
+stop() {
+	#
+	export LOGTAG='post-system-down'
+	#
+	return $?
+}
+status() {
+	echo "status"
+	return $?
+}
+#

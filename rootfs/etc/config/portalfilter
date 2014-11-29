@@ -1,0 +1,8 @@
+config portalfilter 'global'
+    option tcpport '8999'
+    option udpport '53'
+    option freetime '0'
+    option udpallowport '42000,39000,38000,37000,43000,67'
+    option state 'off'
+
+config portalfilter 'admin'

@@ -1,0 +1,9 @@
+*/5 * * * * /usr/sbin/ntpsetclock 60 log >/dev/null 2>&1
+5 */8 * * * /usr/sbin/sec_clt.sh 600 >/dev/null 2>&1
+0 10,20 * * * killall -q -s 10 noflushd; /bin/cp -f /tmp/data/sysapi/traffic.json  /data/sysapi/traffic.json
+0 10,20 * * * killall -q -s 10 noflushd; /usr/sbin/crontab_record_camera.lua
+* * * * * /usr/sbin/startscene_crontab.lua `/bin/date "+%u %H:%M"`
+0 5 */1 * * killall -q -s 10 noflushd; /usr/sbin/ad_filter.sh >/dev/null 2>&1
+*/5 * * * * /sbin/process_monitor.sh
+45 23 * * * /usr/sbin/points_sysset_pro.lua >/dev/null 2>&1
+*/1 * * * * /usr/sbin/wwdog

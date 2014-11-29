@@ -1,0 +1,119 @@
+#!/bin/sh
+timeout=$1
+cmdline=$@
+usage(){
+	echo "USAGE: $0 <timeout> <command>"
+}
+killonepid(){
+	local onepid ksig timelimit wcnt
+	onepid=$1
+	ksig=$2
+	if [ -z "$onepid" ]
+	then
+		return 0
+	fi
+	test -z "$ksig" && ksig=15
+	#
+	if [ $onepid -le 100 ]
+	then
+		return 0
+	fi
+	timelimit=5
+	wcnt=0
+	while [ : ]
+	do
+		if [ "$ksig" = '0' ]
+			then
+			kill -${ksig} $onepid 2>/dev/null
+			return $?
+		fi
+		kill -${ksig} $onepid 2>/dev/null
+		test $? -ne 0 && return 0
+		let wcnt=$wcnt+1
+		test $wcnt -gt $timelimit && break
+		sleep 1
+	done
+	kill -9 $onepid 2>/dev/null
+	test $? -eq 0 && return 1
+	return 0
+	#
+}
+test -z "$timeout" && usage && exit 1
+
+let timeout=$timeout+1-1 2>/dev/null
+test $? -ne 0 && usage && echo "ERROR: timeout($timeout) should be 1 - 120" && exit 1
+test $timeout -gt 120 -o $timeout -le 0 && echo "ERROR: timeout($timeout) should be 1 - 120" && exit 1
+cmdline=$(echo $cmdline | sed -e "s/$timeout //")
+if [ -z "$cmdline" ]
+then
+	usage
+	echo "ERROR: command arg not defined."
+	exit 1
+fi
+nowts=$(date +%s)
+doid=`echo "$nowts/$cmdline/$timeout"|md5sum|awk '{print $1}'`
+logfile="/tmp/`basename $0`.$$.$doid.tmp"
+runfile="/tmp/`basename $0`.$$.$doid.sh"
+
+#echo "DEBUG: running /$cmdline/$timeout: $runfile"
+
+cat <<EOF>$runfile
+#!/bin/sh
+local exitcode
+$cmdline > $logfile 2>&1
+exitcode=\$?
+echo "#%#EXITCODE=\$exitcode" >> $logfile
+EOF
+chmod +x $runfile
+
+touch $logfile
+$runfile >/dev/null 2>&1 &
+runcode=$?
+lookpid=$!
+
+wcnt=0
+addlist=''
+origtimeout=$timeout
+let timeout=$timeout*20
+while [ : ]
+do
+	kill -0 $lookpid 2>/dev/null
+	if [ $? -ne 0 ]
+	then
+		#it exited
+		break
+	fi
+	let wcnt=$wcnt+1
+	if [ $wcnt -ge $timeout ]
+		then
+		break
+	fi
+	usleep 50000
+done
+if [ $wcnt -ge $timeout ]
+	then
+	echo "#%#RUN TIMEOUT: $origtimeout" >> $logfile
+	exitcode=1
+else
+	exitcode=$(cat $logfile | tail -n 1 | grep '^#%#EXITCODE='|awk -F'=' '{print $2}')
+	if [ -z "$exitcode" ]
+		then
+		#echo "WARNING: no exitcode, run timeout $timeout"
+		exitcode=1
+	fi
+fi
+killonepid $lookpid 2>/dev/null
+let exitcode=$exitcode+1-1 2>/dev/null
+if [ $? -ne 0 -a "$exitcode" != '0' ]
+	then
+	#echo "ERROR: invalid exitcode: $exitcode"
+	exitcode=1
+fi
+#echo "DEBUG: running /$cmdline/$timeout, exitcode $exitcode"
+cat $logfile | grep -v '^#%#EXITCODE='
+rm -f $logfile
+rm -f $runfile
+test $runcode -ne 0 && exit $runcode
+exit $exitcode
+#
+

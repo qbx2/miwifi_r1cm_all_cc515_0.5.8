@@ -1,0 +1,12 @@
+#!/bin/sh
+[ "$ACTION" = "ifup" ] && [ "$INTERFACE" = "lan" ] && {
+    if [ -x /usr/sbin/ipaccount ]; then
+        ipaddr=$(uci get network.lan.ipaddr)
+        netmask=$(uci get network.lan.netmask)
+        /usr/sbin/ipaccount -S -n lan -N "$ipaddr/$netmask"
+    fi
+}
+
+[ "$ACTION" = "ifup" ] && [ "$INTERFACE" = "wan" ] && {
+    /usr/bin/gettraffic flush_wan_dev
+}

@@ -1,0 +1,895 @@
+<%
+local ver = require("xiaoqiang.XQVersion").webVersion
+local sys = require "xiaoqiang.util.XQSysUtil"
+local XQLanWanUtil = require "xiaoqiang.util.XQLanWanUtil"
+local wifiUtil = require "xiaoqiang.util.XQWifiUtil"
+
+if sys.getInitInfo() then
+    luci.http.redirect(luci.dispatcher.build_url("web", "home"))
+end
+local wifiInfo = wifiUtil.getAllWifiInfo()
+local ssid = ""
+if wifiInfo[1] then
+    ssid = wifiInfo[1]['ssid']
+end
+local status = sys.checkSystemStatus()
+local wan = true
+if not status.wan or not status.link then
+    wan = false
+end
+
+local wanType = 2
+local AutoWanType = XQLanWanUtil.getAutoWanType()
+if AutoWanType then
+    wanType = AutoWanType
+end
+
+local remote_addr = luci.http.getenv("REMOTE_ADDR")
+local mac = luci.sys.net.ip4mac(remote_addr)
+local lanType = wifiUtil.getDeviceWifiIndex(mac)
+%>
+<%include("web/inc/head")%>
+    <title><%:小米路由器%></title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link href="<%=resource%>/web/css/bc.css?v=<%=ver%>" rel="stylesheet">
+    <link href="<%=resource%>/web/css/guide.css?v=<%=ver%>" rel="stylesheet">
+</head>
+<body>
+<div id="guide-doc">
+    <div id="guide-hd">
+        <div class="mod-guide-hd">
+            <div class="icons">
+                <img src="<%=resource%>/web/img/bg_guide_hd.png?v=<%=ver%>" height="104">
+            </div>
+            <div class="ico-succ">
+                <img src="<%=resource%>/web/img/ico_succ.png?v=<%=ver%>" height="104">
+            </div>
+            <div class="ico-disconnect">
+                <img src="<%=resource%>/web/img/dis_internet.png?v=<%=ver%>" height="104">
+            </div>
+            <div class="ico-unplug-internet">
+                <img src="<%=resource%>/web/img/unplug_internet.png?v=<%=ver%>" height="104">
+            </div>
+            <div class="ico-wds">
+                <img src="<%=resource%>/web/img/guide_repeat.png?v=<%=ver%>" height="104">
+            </div>
+            <p><%:WI-FI设置%></p>
+        </div>
+    </div>
+    <div id="guide-bd">
+        <div class="mod-guide mod-guide-nowanselect">
+            <p class="tit"><%:请手工选择需要的工作模式%></p>
+            <div class="select-option">
+                <img src="<%=resource%>/web/img/normal_rt.png?v=<%=ver%>" /><br />
+                <span class="text"><%:创建一个新的无线Wi-Fi网络%><br /><%:（需要网线连接）%></span>
+                <a href="#" class="btn btn-primary btn-block skipto" data-to="ssidpwd" data-from="nowanselect"><span><%:路由器模式%></span></a>
+            </div>
+            <div class="select-option select-option-last">
+                <img src="<%=resource%>/web/img/repeat_rt.png?v=<%=ver%>" /><br />
+                <span class="text"><%:扩大已有无线Wi-Fi网络的覆盖范围%><br /><%:（不需要网线连接）%></span>
+                <a href="#" class="btn btn-primary btn-block skipto" data-to="wds" data-from="nowanselect"><span><%:无线中继模式%></span></a>
+            </div>
+        </div>
+        <!--  -->
+        <div class="mod-guide mod-guide-disconnect">
+            <p class="tit"><%:设置无线中继需要断开WAN口的网线连接%></p>
+            <img src="<%=resource%>/web/img/needdisinternet.png?v=<%=ver%>" />
+            <div class="btns">
+                <p><a href="#" class="btn btn-primary btn-block skipto" data-to="wds" data-from="disconnect"><span><%:已断开，下一步%></span></a></p>
+                <p><a href="#" class="a1 skipto" data-to="ssidpwd"><span><%:返回%></span></a></p>
+            </div>
+        </div>
+        <!--  -->
+        <div class="mod-guide mod-guide-pppoe">
+            <p class="tit"><%:请输入运营商提供的宽带账号信息%></p>
+            <form id="pppoe" name="pppoe" class="form clearfix" action="/">
+                <div class="form-inputs">
+                    <div class="form-item">
+                        <label class="k"><%:用户名%></label>
+                        <span class="v"><input name="ppoename" type="text" class="ipt-text" autocomplete="off"></span>
+                        <span class="t"></span>
+                    </div>
+                    <div class="form-item">
+                        <label class="k"><%:密码%></label>
+                        <span class="v"><input name="ppoepwd" data-type="password" type="password" class="ipt-text" autocomplete="off"></span>
+                        <span class="t"></span>
+                    </div>
+                </div>
+                <div class="form-contral">
+                    <button class="btn btn-primary l" type="submit"><span><%:下一步%></span></button>
+                    <button class="btn btn-dft r skipto" data-to="ssidpwd" data-from="pppoe" type="button"><span><%:跳过%></span></button>
+                </div>
+            </form>
+            <p class="switchstep">
+                <a href="#" class="a1 skipto goback" data-to="hellopage" data-from="pppoe"><%:返回%></a>
+                <%if (wanType==1) then%>
+                    <span>|</span>
+                    <a href="#" class="a1 skipto" data-to="ssidpwd" data-from="pppoe"><%:无需拨号(DHCP方式)%></a>
+                <%end%>
+            </p>
+        </div>
+        <!--  -->
+        <div class="mod-guide mod-guide-ssidpwd">
+            <p class="tit"><%:请设置Wi-Fi名称与密码%></p>
+            <form id="ssidpwd" name="ssidpwd" class="form clearfix" action="/" autocomplete="off">
+                <div class="form-inputs">
+                    <div class="form-item">
+                        <label class="k"><%:Wi-Fi名称%></label>
+                        <span class="v"><input name="ssid" type="text" class="ipt-text" value="<%=ssid%>" autocomplete="off"></span>
+                        <span class="t"></span>
+                    </div>
+                    <div class="form-item">
+                        <label class="k"><%:Wi-Fi密码%></label>
+                        <span class="v"><input name="wifipwd" type="password" class="ipt-text" data-type="password" autocomplete="off"></span>
+                        <span class="t"></span>
+                    </div>
+                    <div class="form-item" id="routerpassword" style="display:none;">
+                        <label class="k"><%:管理密码%></label>
+                        <span class="v"><input name="rtpwd" type="password" class="ipt-text" data-type="password" autocomplete="off"></span>
+                        <span class="t"></span>
+                    </div>
+                    <div class="form-item form-item-ckbox">
+                        <label><input type="checkbox" id="samepwd" checked> <span><%:将Wi-Fi密码同时设为路由器管理密码%></span></label>
+                    </div>
+                </div>
+                <div class="form-contral">
+                    <button id="btnSetssidpwd" class="btn btn-primary btn-block" type="submit"><span><%:完成%></span></button>
+                </div>
+            </form>
+            <p class="switchstep">
+                <%if (wanType==1) then%>
+                    <a href="#" class="a1 goback skipto" data-to="pppoe" data-from="ssidpwd"><%:返回%></a>
+                <%else%>
+                    <a href="#" class="a1 goback skipto" data-to="hellopage" data-from="ssidpwd"><%:返回%></a>
+                <%end%>
+
+                <%if (wanType==2) then%>
+                    <span>|</span>
+                    <a href="#" class="a1 skipto" data-to="pppoe" data-from="ssidpwd"><%:需要拨号(PPPoE方式)%></a>
+                    <span>|</span>
+                    <a href="#" class="a1 skipto" data-to="wds" data-from="ssidpwd"><%:无线中继%></a>
+                <%end%>
+            </p>
+        </div>
+        <!-- /暂时不做 -->
+        <div class="mod-guide mod-guide-initedbyother">
+            <div class="item item-1">
+                <p><%:初始化设置是我完成的%></p>
+                <a href="<%=luci.dispatcher.build_url("web", "home")%>" class="btn btn-primary btn-block"><span><%:跳转到MiWiFi.com%></span></a>
+            </div>
+            <div class="item item-2">
+                <p><%:初始化设置不是我完成的%></p>
+                <a href="#" class="btn btn-dft btn-block"><span><%:我要重置%></span></a>
+            </div>
+        </div>
+        <!--  -->
+        <div class="mod-guide mod-guide-finish">
+            <p class="tit" id="lanlink" style="display:none;"><%:正在配置用户名与密码，15秒后将自动跳转管理后台%></p>
+            <p class="tit" id="wifilink" style="display:none;"><%:正在配置用户名与密码，请稍候手动连接Wi-Fi%> <b id="ssid24"></b> <%:或者%> <b id="ssid50"></b>，<%:连接Wi-Fi成功后请刷新页面进入管理后台%></p>
+            <div class="codeimg">
+                <p><%:扫描二维码下载手机APP%><br><%:体验路由器远程管理和更多好玩功能！%></p>
+                <p><a href="<%=resource%>/web/img/code.png?v=<%=ver%>" target="_blank"><img width="150" src="<%=resource%>/web/img/code.png?v=<%=ver%>"></a></p>
+            </div>
+            <div class="codeimg-btn">
+                <p><%:点击图标下载手机APP %><br><%:体验路由器远程管理和更多好玩功能！%></p>
+                <p><a href="http://www1.miwifi.com/miwifi_download.html" class="btn btn-primary btn-block" ><span><%:立即下载手机APP%></span></a></p>
+            </div>
+        </div>
+        <!--  -->
+        <div class="mod-guide mod-guide-wds">
+            <div id="wdsInputSelectDiv">
+                <p class="tit"><%:请选择要扩大范围的无线网络%></p>
+                <form id="wds" name="wds" class="form clearfix" action="/">
+                    <div class="form-inputs">
+                        <div class="form-item-out toggle-element flag-is-select ssid-select-relative" id="ssidSelectDiv">
+                            <div class="form-item-select">
+                                <label class="k"><%:选择网络%></label>
+                                <span class="v">
+                                     <select id="ssidselect" name="ssidselect" class="beautify" style="width:161px;">
+                                        <option value=""><%:正在扫描附近的无线网络%></option>
+                                    </select>
+                                </span>
+                                <span class="t"></span>
+                            </div>
+                            <span id="btnFreshenWIFI" class="icon-freshen"></span>
+                        </div>
+                        <div class="form-item-out toggle-element hide">
+                            <div class="form-item">
+                                <label class="k"><%:网络名称%></label>
+                                <span class="v"><input name="ssidinput" type="text" class="ipt-text" autocomplete="off"></span>
+                                <span class="t"></span>
+                            </div>
+                        </div>
+                        <div class="form-item-out toggle-element">
+                            <div class="form-item" id="wdsWifiInputDivForSelect">
+                                <label class="k"><%:输入密码%></label>
+                                <span class="v"><input name="passwordforselect" data-type="password"  type="password" class="ipt-text" autocomplete="off"></span>
+                                <span class="t"></span>
+                            </div>
+                            <div class="form-item" id="wdsWifiInputDivForSelectWep" style="display:none;">
+                                <label class="k"><%:输入密码%></label>
+                                <span class="v"><input name="passwordforselectwep" data-type="password"  type="password" class="ipt-text" autocomplete="off"></span>
+                                <span class="t"></span>
+                            </div>
+                        </div>
+                        <div class="form-item-out toggle-element hide">
+                            <div class="form-item" id="wdsWifiInputDivForInput">
+                                <label class="k"><%:输入密码%></label>
+                                <span class="v"><input name="passwordforinput" data-type="password"  type="password" class="ipt-text" autocomplete="off"></span>
+                                <span class="t"></span>
+                            </div>
+                        </div>
+
+                        <div class="form-item" id="wdsrouterpassword">
+                            <label class="k"><%:管理密码%></label>
+                            <span class="v"><input name="rtpwd" type="password" class="ipt-text" data-type="password" autocomplete="off"></span>
+                            <span class="t"></span>
+                        </div>
+                        <p class="change-select-type"><a class="a1" href="#" id="changeSelectType"><%:手工输入网络名称%></a></p>
+                    </div>
+                    <div class="form-contral">
+                        <button class="btn btn-primary btn-block" type="submit"><span><%:一键无线中继%></span></button>
+                        <a class="a1 goback skipto" data-to="" href="#" id="wdsGoback"><span><%:返回%></span></a>
+                    </div>
+                </form>
+            </div>
+            <div id="wdsSettingDiv" class="wds-setting-div hide">
+                <p><%:正在设置中，请稍候...%><br /><%:请不要关闭浏览器或断开路由器%></p>
+                <span class="loading"></span>
+            </div>
+        </div>
+        <!--  -->
+        <div class="mod-guide mod-guide-wdsfinish">
+            <p class="tit"><%:已扩大无线网络 %><span class="green" id="wdswifi"></span> <%:的覆盖范围，稍等30秒后%></p>
+            <p class="tit"><%:可以通过 %><span class="green" id="wdsip"></span> <%:访问小米路由器管理后台 。%></p>
+            <div class="codeimg">
+                <p><%:扫描二维码下载手机APP%><br><%:体验路由器远程管理和更多好玩功能！%></p>
+                <p><img width="150" src="<%=resource%>/web/img/code.png?v=<%=ver%>"></p>
+            </div>
+            <div class="codeimg-btn">
+                <p><%:点击图标下载手机APP %><br><%:体验路由器远程管理和更多好玩功能！%></p>
+                <p><a href="http://www1.miwifi.com/miwifi_download.html" class="btn btn-primary btn-block" ><span><%:立即下载手机APP%></span></a></p>
+            </div>
+        </div>
+    </div>
+</div>
+<%include("web/inc/g.js")%>
+<script>
+var isMobile = {
+    Android: function() {
+        return navigator.userAgent.match(/Android/i);
+    },
+    BlackBerry: function() {
+        return navigator.userAgent.match(/BlackBerry/i);
+    },
+    iOS: function() {
+        return navigator.userAgent.match(/iPhone|iPad|iPod/i);
+    },
+    Opera: function() {
+        return navigator.userAgent.match(/Opera Mini/i);
+    },
+    Windows: function() {
+        return navigator.userAgent.match(/IEMobile/i);
+    },
+    any: function() {
+        return (isMobile.Android() || isMobile.BlackBerry() || isMobile.iOS() || isMobile.Opera() || isMobile.Windows());
+    }
+};
+(function(){
+
+    $.selectBeautify({
+        'maxHeight': '205px'
+    });
+    var obj = {},
+        wan = <%-if wan then-%>true<%-else-%>false<%-end-%>,
+        wanType = <%=wanType%>,// 1 = pppoe else dhcp
+        lanType = <%=lanType%>, // 0 = lan else wifi
+        stepMap = {
+            'disconnect': '.mod-guide-disconnect',
+            'pppoe': '.mod-guide-pppoe',
+            'wds': '.mod-guide-wds',
+            'finish': '.mod-guide-finish',
+            'initbyother': '.mod-guide-initedbyother',
+            'ssidpwd': '.mod-guide-ssidpwd',
+            'wdsfinish': '.mod-guide-wdsfinish',
+            'nowanselect': '.mod-guide-nowanselect'
+        },
+        isinited = false;
+    var $guideHd = $('.mod-guide-hd');
+    var titMap = {
+        'ssidpwd': {
+            'p': '<%:Wi-Fi设置%>',
+            'hdclass': 'mod-guide-hd'
+        },
+        'pppoe': {
+            'p': '<%:上网设置%>',
+            'hdclass': 'mod-guide-hd'
+        },
+        'finish': {
+            'p': '<%:恭喜！小米路由器已初始化完成！%>',
+            'hdclass': 'mod-guide-hd is-hd-success'
+        },
+        'wds': {
+            'p': '<%:无线中继模式设置%>',
+            'hdclass': 'mod-guide-hd is-hd-wds'
+        },
+        'wdsfinish': {
+            'p': '<%:恭喜！一键无线中继完成%>',
+            'hdclass': 'mod-guide-hd is-hd-success'
+        },
+        'disconnect': {
+            'p': '<%:无线中继模式设置%>',
+            'hdclass': 'mod-guide-hd is-hd-disconnect'
+        },
+        'nowanselect': {
+            'p': '<%:咦？似乎没有连接网线？%>',
+            'hdclass': 'mod-guide-hd is-hd-nowanselect'
+        }
+    };
+    var getWifiEncryptionStatus = function(){
+        var index = $('#ssidselect')[0].selectedIndex;
+        var selectoption = $('#ssidselect').find('option').eq(index);
+        var reg = /no-encryption/i;
+        var classname = selectoption.attr('class');
+        var result;
+
+        if( reg.test(classname) ){
+            //未加密
+            result = false;
+        }else{
+            //加密
+            result = true;
+        }
+        console.log(classname, result);
+        return result;
+    };
+    var getWifiEncryption = function(){
+        var index = $('#ssidselect')[0].selectedIndex;
+        var selectoption = $('#ssidselect').find('option').eq(index);
+        var encryption = selectoption.attr('data-encryption');
+        return encryption;
+    };
+    var showHideWifiInput = function(){
+        var flag = getWifiEncryptionStatus();
+        var wifiInputDiv = $('#wdsWifiInputDivForSelect');
+        var wifiInputDivWep = $('#wdsWifiInputDivForSelectWep');
+        if( flag ){
+            wifiInputDiv.find('input').val('');
+            wifiInputDivWep.find('input').val('');
+            if( getWifiEncryption() == 'WEP' ){
+                wifiInputDivWep.show();
+                wifiInputDiv.hide();
+            }else{
+                wifiInputDivWep.hide();
+                wifiInputDiv.show();
+            }
+        }else{
+            wifiInputDiv.hide();
+            wifiInputDiv.find('input').val('12345678');
+            wifiInputDivWep.hide();
+            wifiInputDivWep.find('input').val('12345');
+        }
+    };
+    var updateWifiList = function(){
+        $.ajax({
+            url: '<%=luci.dispatcher.build_url("api", "xqnetwork", "wifi_list")%>',
+            type: 'GET',
+            dataType: 'json',
+            success: function(res){
+                if( res.code == 0 ){
+                    if( res.list.length > 0 ){
+                        var fragment = document.createDocumentFragment();
+                        var list = res.list;
+                        var select = $('#ssidselect');
+
+                        $(list).each(function(index, item){
+                            var option = $('<option />');
+                            option.attr('data-bandwidth', item.bandwidth);
+                            option.attr('data-ssid', item.ssid);
+                            option.text(item.ssid);
+                            option.attr('data-channel', item.channel);
+                            option.attr('data-enctype', item.enctype);
+                            option.attr('data-encryption', item.encryption);
+                            option.addClass( 'wds-wifi-option' );
+                            if( item.encryption == 'NONE' ){
+                                if( item.signal > 75 ){
+                                    option.addClass( 'no-encryption-4' );
+                                }else if( item.signal > 50 && item.signal <= 75 ){
+                                    option.addClass( 'no-encryption-3' );
+                                }else if( item.signal > 25 && item.signal <= 50 ){
+                                    option.addClass( 'no-encryption-2' );
+                                }else if( item.signal <= 25 ){
+                                    option.addClass( 'no-encryption-1' );
+                                }
+                            }else{
+                                if( item.signal > 75 ){
+                                    option.addClass( 'is-encryption-4' );
+                                }else if( item.signal > 50 && item.signal <= 75 ){
+                                    option.addClass( 'is-encryption-3' );
+                                }else if( item.signal > 25 && item.signal <= 50 ){
+                                    option.addClass( 'is-encryption-2' );
+                                }else if( item.signal <= 25 ){
+                                    option.addClass( 'is-encryption-1' );
+                                }
+                            }
+                            fragment.appendChild(option[0]);
+                        });
+                        select.empty();
+                        $('#dummydata').hide().empty();
+                        select[0].appendChild(fragment);
+                        select.next('.dummy').remove();
+                        $.selectBeautify({
+                            'maxHeight': '205px'
+                        });
+                        select.next('.dummy').show();
+
+                        showHideWifiInput();
+                    }else{
+                        $.alert('<%:未能扫描到Wi-Fi%>');
+                    }
+                }
+            }
+        });
+    };
+    // 1  连上网线  0  断开网线
+    var getWanLinkStatus = function(){
+        var link;
+        $.ajax({
+            url: '<%=luci.dispatcher.build_url("api", "xqnetwork", "wan_link")%>',
+            type: 'GET',
+            async: false,
+            dataType: 'json',
+            success: function(res){
+                if( res.code == 0 ){
+                    link = res.link;
+                }else{
+                    $.alert(res.msg);
+                }
+            }
+        });
+        return link;
+    };
+    $.sub( 'init:downcount', function( evt, data ) {
+        var maxTime = 5 * 60,
+            timer = null,
+            downcount = function(){
+                maxTime--;
+                if ( maxTime <= 0 ) {
+                    window.clearInterval( timer );
+                    if (!isinited) {
+                        $( '.mod-guide-hd' ).addClass( 'is-hd-warning' );
+                        $( '.mod-guide-hd .content' ).html( '<%:请问你睡着了吗？这么久还没完成初始化。%>' );
+
+                        setTimeout( function(){
+                            $( '.mod-guide-hd' ).removeClass( 'is-hd-warning' );
+                        }, 500 );
+                    }
+                }
+            };
+        timer = window.setInterval( function() {
+            downcount();
+        }, 1000 );
+    });
+
+    $.sub( 'init:isinitbyother', function( evt, data ) {
+
+        var timer = null;
+        timer = window.setInterval( function(){
+            $.getJSON( '<%=luci.dispatcher.build_url("api", "xqsystem", "is_inited")%>', function( rsp ){
+                if ( rsp.code === 0 && rsp.inited === 1 ) {
+                    isinited = true;
+                    $.pub( 'init:toStep', {step: 'initbyother'} );
+                    $( '.mod-guide-hd' ).addClass( 'is-hd-success' );
+                    $( '.mod-guide-hd .content' ).html( '<%:初始化设置已经其他终端完成%>' );
+                    window.clearInterval(timer);
+                }
+            });
+        }, 5000 );
+
+    });
+
+    $.sub( 'init:toStep', function( evt, data ) {
+        if( data.step == 'wds' ){
+            var wanLinkStatus = getWanLinkStatus();
+            if( wanLinkStatus != 0 ){
+                //没断开网线
+                $.pub('init:toStep', {step: 'disconnect'});
+                if( data.from == 'disconnect' ){
+                    $.dialog({
+                        'title': false,
+                        'padding': '10px 2px',
+                        'width': 280,
+                        'content': '<%:检测到你的WAN口网线还没有断开%>'
+                    }).time(3 * 1000);
+                }
+                return;
+            }else{
+                updateWifiList();
+            }
+        }
+        if( data.step == 'finish' || data.step == 'wdsfinish' ){
+            if( isMobile.any() ){
+                $('.mod-guide .codeimg').hide();
+            }else{
+                $('.mod-guide .codeimg-btn').hide();
+            }
+        }
+        $( '.mod-guide' ).hide();
+        $( stepMap[data.step] ).show();
+        $guideHd.find('p').text(titMap[data.step].p);
+        $guideHd.attr('class', titMap[data.step].hdclass);
+    });
+
+    $.sub( 'init:start', function( evt, data ) {
+        if ( data.wan ) {
+            if ( data.wanType === 1 ) {
+                obj.wanType = 'pppoe';
+                $.pub( 'init:toStep', {step: 'pppoe'});
+            } else if (data.wanType === 99 ){
+                $.pub( 'init:toStep', {step: 'nowanselect'});
+            }else {
+                obj.wanType = 'dhcp';
+                $.pub( 'init:toStep', {step: 'ssidpwd'});
+            }
+        } else {
+            //没插网线
+            // $.pub( 'init:toStep', {step: 'select'});
+        }
+    });
+
+    $.sub( 'init:skipwds', function( evt, data ) {
+        if ( data.wanType === 1 ) {
+            obj.wanType = 'pppoe';
+            $.pub( 'init:toStep', {step: 'pppoe'});
+        } else {
+            obj.wanType = 'dhcp';
+            $.pub( 'init:toStep', {step: 'ssidpwd'});
+        }
+    });
+
+    $.sub( 'init:done', function( evt, data ) {
+        if (lanType == 0) {
+            $( '#lanlink' ).show();
+            setTimeout( function() {
+                $.pub( 'init:totry' );
+            }, 2000);
+        } else {
+            $( '#ssid24' ).text( obj.ssid24 );
+            $( '#ssid50' ).text( obj.ssid50 );
+            $( '#wifilink' ).show();
+        }
+        $.pub( 'init:toStep', {step: 'finish'} );
+    });
+
+    $.sub( 'init:totry', function( evt, data ) {
+        var homeUrl = '<%=luci.dispatcher.build_url("web","home")%>';
+        if ( lanType === 0 ) {
+            setTimeout( function() {
+                window.location.href = homeUrl;
+            }, 13 * 1000 );
+        } else {
+            pingRouter(function(){
+                window.location.href = homeUrl;
+            });
+        }
+    });
+
+    $.sub( 'init:bindEvent', function( evt, data ){
+
+        // set PPPoE
+        $( '#pppoe' ).on( 'submit', function( e ) {
+            e.preventDefault();
+            var frm = this.name;
+            var validator = FormValidator.checkAll( frm, [{
+                name: 'ppoename',
+                display :'<%:用户名%>',
+                rules: 'required'
+            }, {
+                name: 'ppoepwd',
+                display :'<%:密码%>',
+                rules: 'required'
+            }] );
+            if ( validator ) {
+                obj.wanType = "pppoe";
+                obj.pppoeName = $.trim( this.elements['ppoename'].value );
+                obj.pppoePwd = $.trim( this.elements['ppoepwd'].value );
+                $.pub( 'init:toStep', {step: 'ssidpwd'} );
+                $( stepMap['ssidpwd'] ).find('.goback').attr('data-to', 'pppoe');
+            }
+        });
+        // set wds
+        $( '#wds' ).on( 'submit', function( e ) {
+            e.preventDefault();
+            var frm = this.name;
+            var _validRules = [{
+                name: 'ssidinput',
+                display: '<%:网络名称%>',
+                rules: 'required|max_length[31]',
+                msg: {
+                        'max_length': '<%:网络名称过长，请使用短一些的名称%>'
+                }
+            },{
+                name: 'passwordforselect',
+                display: '<%:网络密码%>',
+                rules: 'required|min_length[8]|max_length[63]',
+                msg: {
+                        'max_length': '<%:密码过长，请使用短一些的密码%>'
+                }
+            },{
+                name: 'passwordforselectwep',
+                display: '<%:网络密码%>',
+                rules: 'required|valid_weppassword'
+            },{
+                name: 'rtpwd',
+                display :'<%:管理密码%>',
+                rules: 'required|min_length[8]|max_length[63]',
+                msg: {
+                    'max_length': '<%:密码过长，请使用短一些的密码%>'
+                }
+            }];
+            var validRules;
+            var selectType = $('#ssidSelectDiv').hasClass('flag-is-select') ? true : false;
+
+            if( selectType ){
+                if( getWifiEncryption() == 'WEP' ){
+                    validRules = [_validRules[2], _validRules[3]];
+                }else{
+                    validRules = [_validRules[1], _validRules[3]];
+                }
+            }else{
+                validRules = [_validRules[0], _validRules[3]];
+            }
+
+            var validator = FormValidator.checkAll( frm, validRules );
+            if ( validator ) {
+                var index = $('#ssidselect')[0].selectedIndex;
+                var selectoption = $('#ssidselect').find('option').eq(index);
+
+                var wifipwd = $.trim( this.elements['passwordforselect'].value );
+                var pwd = $.trim( this.elements['rtpwd'].value );
+
+                // Encrypt string
+                var nonce = Encrypt.init();
+                var oldPwd = Encrypt.oldPwd( 'admin' );
+                var newPwd = Encrypt.newPwd( 'admin', pwd );
+
+                var reqDataSelect = {
+                    initialize: 1,
+                    nonce: nonce,
+                    oldPwd: oldPwd,
+                    newPwd: newPwd,
+                    ssid: selectoption.attr('data-ssid'),
+                    encryption: selectoption.attr('data-encryption'),
+                    enctype: selectoption.attr('data-enctype'),
+                    password: $.trim( this.elements['passwordforselect'].value ),
+                    channel: selectoption.attr('data-channel'),
+                    bandwidth: selectoption.attr('data-bandwidth')
+                };
+                if( getWifiEncryption() == 'WEP' ) {
+                    reqDataSelect.password = $.trim( this.elements['passwordforselectwep'].value );
+                }
+                var reqDataInput = {
+                    initialize: 1,
+                    nonce: nonce,
+                    oldPwd: oldPwd,
+                    newPwd: newPwd,
+                    ssid: $.trim( $('#wds input[name="ssidinput"]').val() ),
+                    password: $.trim( this.elements['passwordforinput'].value )
+                };
+                if( $.trim( reqDataInput.password ).length == 0 ){
+                    reqDataInput.encryption = 'NONE';
+                }
+                var reqData;
+                if( selectType ){
+                    reqData = reqDataSelect;
+                }else{
+                    reqData = reqDataInput;
+                }
+                $('#wdsInputSelectDiv').hide();
+                $('#wdsSettingDiv').show();
+
+                $.ajax({
+                    url: '<%=luci.dispatcher.build_url("api", "xqnetwork", "set_wifi_ap")%>',
+                    type: 'POST',
+                    data: reqData,
+                    dataType: 'json',
+                    success: function(res){
+                        if( res.code == 0 ){
+                            $('#wdswifi').html(reqData.ssid);
+                            $('#wdsip').html(res.ip);
+                            $.pub( 'init:toStep', {step: 'wdsfinish'} );
+                        }else{
+                            $('#wdsInputSelectDiv').show();
+                            $('#wdsSettingDiv').hide();
+                            $.dialog({
+                                'title': false,
+                                'padding': '10px 2px',
+                                'width': 280,
+                                'content': '<%:尝试无线中继失败了%>'
+                            }).time(3 * 1000);
+                        }
+                    }
+                });
+            }
+        });
+        // switch rtpwd disabed
+        $( '#samepwd' ).on( 'click', function( e ) {
+            var tar = e.target,
+                $tar = $( tar ),
+                $pwditem = $( '#routerpassword' );
+            if ( !tar.checked ) {
+                // $pwditem.removeClass( 'form-item-disabled' );
+                $pwditem.show();
+                $pwditem.find( 'input' ).prop( 'disabled', false );
+            } else {
+                // $pwditem.addClass( 'form-item-disabled' );
+                $pwditem.hide();
+                $pwditem.find( 'input' ).prop( 'disabled', true );
+            }
+        });
+        // set ssid pwd
+        $( '#ssidpwd' ).on( 'submit', function( e ) {
+            e.preventDefault();
+            var frm = this.name,
+                ssid,
+                pwd,
+                wifipwd,
+                requestDate,
+                nonce,
+                oldPwd,
+                newPwd,
+                ac = '_5G',
+                ispwdsame,
+                validator,
+                _validRules,
+                validRules;
+
+            ispwdsame = $( '#samepwd' ).prop('checked');
+            _validRules = [{
+                    name: 'ssid',
+                    display :'<%:Wi-Fi名称%>',
+                    rules: 'required|valid_ssid|max_length[28]',
+                    msg: {
+                        'max_length': '<%:名字过长，请使用短一些的名字%>'
+                    }
+                },{
+                    name: 'wifipwd',
+                    display :'<%:Wi-Fi密码%>',
+                    rules: 'required|min_length[8]|max_length[63]',
+                    msg: {
+                        'max_length': '<%:密码过长，请使用短一些的密码%>'
+                    }
+                },{
+                    name: 'rtpwd',
+                    display :'<%:管理密码%>',
+                    rules: 'required|min_length[8]|max_length[63]',
+                    msg: {
+                        'max_length': '<%:密码过长，请使用短一些的密码%>'
+                    }
+                }
+            ];
+            if ( ispwdsame ) {
+                validRules = [_validRules[0],_validRules[1]];
+            } else {
+                validRules = _validRules;
+            }
+            validator = FormValidator.checkAll( frm, validRules );
+
+            if ( validator ) {
+                ssid = $.trim( this.elements['ssid'].value );
+                wifipwd = $.trim( this.elements['wifipwd'].value );
+                if ( ispwdsame ) {
+                    pwd = wifipwd;
+                } else {
+                    pwd = $.trim( this.elements['rtpwd'].value );
+                }
+                // Encrypt string
+                nonce = Encrypt.init();
+                oldPwd = Encrypt.oldPwd( 'admin' );
+                newPwd = Encrypt.newPwd( 'admin', pwd );
+
+                requestDate = {
+                    "nonce": nonce,
+                    "routerName": ssid,
+                    "wanType": obj.wanType,
+                    "wifi24Ssid": ssid,
+                    "wifi50Ssid": ssid + ac,
+                    "newPwd": newPwd,
+                    "oldPwd": oldPwd,
+                    "wifiPwd": wifipwd
+                };
+
+                obj.ssid24 = ssid;
+                obj.ssid50 = ssid + ac;
+
+                if ( obj.wanType && obj.wanType === 'pppoe' ) {
+                    requestDate['pppoeName'] = obj.pppoeName;
+                    requestDate['pppoePwd'] = obj.pppoePwd;
+                }
+
+                $( '#btnSetssidpwd' ).trigger( 'wait' );
+
+                var client = 'other';
+                if (isMobile.Android()) {
+                    client = 'android';
+                } else if (isMobile.iOS()) {
+                    client = 'ios';
+                }
+                $.when(
+                    $.ajax( '<%=luci.dispatcher.build_url("api", "xqsystem","router_init")%>', {type:'POST', data: requestDate, dataType: 'json'} ),
+                    $.ajax( '<%=luci.dispatcher.build_url("api", "xqsystem","set_inited")%>', {type:'POST', data: {"client": client}, dataType: 'json'} )
+                )
+                .done(function() {
+                    $.pub( 'init:done' );
+                })
+                .fail(function() {
+                    $.pub( 'init:done' );
+                });
+
+            }
+        });
+
+        $( '#btnSetssidpwd' ).on( 'wait', function( e ) {
+            this.className = 'btn btn-primary-disabled btn-block';
+            this.disabled = true;
+            $('span', this).text('<%:处理中...%>');
+            $( '#ssidpwd' ).prop( 'disabled', true );
+        });
+
+        // skip to
+        $( '.skipto' ).on( 'click', function( e ) {
+            e.preventDefault();
+            var me = this,
+                target = $( me ).attr( 'data-to' );
+            var from = $( me ).attr('data-from');
+
+            if ( target === 'ssidpwd' ) {
+                obj.wanType = 'dhcp';
+            }
+            if( target === 'hellopage' ){
+                window.location.href = 'http://' + location.host;
+            }
+            $.pub( 'init:toStep', {step: target, from: from} );
+            if( from && ( from != 'disconnect' ) ){
+                $( stepMap[target] ).find('.goback').attr('data-to', from);
+            }
+        });
+
+        // skip wds
+        $( '.skipwds' ).on( 'click', function( e ) {
+            e.preventDefault();
+            $.pub( 'init:skipwds', {wanType: wanType} );
+        });
+        $('#changeSelectType').on('click', function(e){
+            e.preventDefault();
+            $('#wds .toggle-element').toggle();
+            $('#ssidSelectDiv').toggleClass('flag-is-select');
+            if( /<%:输入%>/.test( $(this).text() ) ){
+                $(this).html('<%:选择已有网络%>');
+            }else{
+                $(this).html('<%:手工输入网络名称%>');
+            }
+        });
+        $('#btnFreshenWIFI').on('click', function(e){
+            $('#ssidselect').next('.dummy').html('<%:正在扫描附近的无线网络%>');
+            updateWifiList();
+        });
+        $('body').delegate('#dummydata .wds-wifi-option', 'click', function(e){
+            e.preventDefault();
+            showHideWifiInput();
+        });
+    });
+
+    $(function(){
+        $.formInit();
+        $.pub( 'init:start', {wan: true, wanType: wanType} );
+        // $.pub( 'init:downcount' );
+        $.pub( 'init:bindEvent' );
+        // $.pub( 'init:isinitbyother' );
+    });
+}());
+</script>
+</body>
+</html>

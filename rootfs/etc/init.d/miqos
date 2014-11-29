@@ -1,0 +1,154 @@
+#!/bin/sh /etc/rc.common
+
+START=99
+
+EXTRA_COMMANDS=" on off init_ipt qos_flag status show_limit change_band on_limit off_limit show_band auto set_limit reset_limit apply set_auto "
+EXTRA_HELP="
+            on                                              Turn on QoS service
+            off                                             Turn off QoS service
+            change_band UP_BAND DOWN_BAND                   Set total width for uplink and downlink
+            show_band                                       Print total bandwidth
+            -------------------------------------------------
+            show_limit [MAC]                                Print Bandlimit of device, MAC is optional
+            on_limit MAC UP_MAX DOWN_MAX UP_MIN DOWN_MIN    Turn on up and down MAX Bandlimit of device
+            set_limit MAC UP_MAX DOWN_MAX UP_MIN DOWN_MIN   Only add limit for MAC without enable it soon
+            off_limit [MAC]                                 Turn off limit for all(with MAC) or device(no MAC)
+            reset_limit [MAC]                               Only del limit for MAC without enable it soon
+            auto [on/off]                                   Turn on/off auto QoS. default is on
+            set_auto [on/off]                               Turn on/off auto QoS without active it.
+            apply [all/host]                                Refresh all/hosts rules and enable current config
+            -------------------------------------------------"
+
+
+EXECMD="/usr/sbin/miqosd std"
+EXECMD_C="/usr/sbin/miqosc"
+export PROCLINE=$EXECMD
+export PROCFLAG="/usr/bin/lua $PROCLINE"
+
+#0,ok; non-0, Nok
+start() {
+    qos_flag
+    if [ $? -ne "0" ]; then
+            echo 'miqos is not enabled, exit.'
+            return 0    #error
+    fi
+
+    status
+    if [ $? -eq "0" ]; then
+            echo 'miqos already running, exit.'
+            return 0
+    fi
+
+
+    /usr/sbin/supervisord start
+    return $?
+}
+
+stop() {
+    status
+    if [ $? -ne "0" ]; then
+        echo 'miqos is not running, exit.'
+        return 0
+    fi
+
+    #send off commd 1stly
+    $EXECMD_C off qos
+
+    nohup /usr/sbin/supervisord stop >/dev/null 2>&1 &
+    return 0
+}
+
+restart(){
+    /usr/sbin/supervisord restart
+    return $?
+}
+
+on(){
+    config_load "miqos"
+    uci set miqos.settings.enabled=1
+    uci commit miqos
+
+    #try to stop hwnat whatever it's on or not
+    /etc/init.d/hwnat stop &>/dev/null
+    #/etc/init.d/hwnat disable &>/dev/null
+
+    #/usr/sbin/ip link set ifb0 up
+
+    start
+}
+
+off(){
+    stop
+
+    config_load "miqos"
+    uci set miqos.settings.enabled=0
+    uci commit miqos
+
+    #try to start hwnat whatever enough memory or not
+    /etc/init.d/hwnat start &>/dev/null
+    
+    return 0
+}
+
+#return: 0,enabled; 1 disabled
+qos_flag(){
+    config_load "miqos"
+    local st
+    st=`uci get miqos.settings.enabled 2>/dev/null`
+    if [ $st -eq "0" ]; then
+            return 1
+    fi
+    return 0
+}
+
+init_ipt(){
+   /usr/sbin/miqosd_init.sh std
+   return $?
+}
+
+# status: 0, actived, 1, inactived
+status(){
+    /usr/sbin/supervisord status
+    return $?
+}
+
+show_limit(){
+    $EXECMD_C show_limit $@
+}
+
+on_limit(){
+    $EXECMD_C on_limit $@
+}
+
+off_limit(){
+    $EXECMD_C off_limit $@
+}
+
+change_band(){
+    $EXECMD_C change_band $@
+}
+
+show_band(){
+    $EXECMD_C show_band $@
+}
+
+auto(){
+    $EXECMD_C auto $@
+}
+
+set_limit(){
+    $EXECMD_C set_limit $@
+}
+
+reset_limit(){
+    $EXECMD_C reset_limit $@
+}
+
+apply(){
+    $EXECMD_C apply $@
+}
+
+set_auto(){
+    $EXECMD_C set_auto $@
+}
+

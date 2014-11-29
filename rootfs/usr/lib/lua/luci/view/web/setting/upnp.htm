@@ -1,0 +1,102 @@
+<%
+--[[
+    Info    upnp
+]]--
+local ver = require("xiaoqiang.XQVersion").webVersion
+%>
+<%include("web/inc/head")%>
+<title><%:小米路由器%></title>
+<meta name="viewport" content="width=1200">
+<link href="<%=resource%>/web/css/bc.css?v=<%=ver%>" rel="stylesheet">
+<link href="<%=resource%>/web/css/upnp.css?v=<%=ver%>" rel="stylesheet">
+</head>
+<body>
+<div id="doc">
+    <%include("web/inc/header")%>
+    <%include("web/inc/nav_set")%>
+    <div id="bd">
+        <div class="mod-set mod-upnp">
+            <div class="hd">
+                <h3><%:UPnP状态%></h3>
+                <div class="switch">
+                    <a href="#" id="upnpswitch" class="btn-switch btn-switch-off"></a>
+                </div>
+            </div>
+            <div class="bd">
+                <h4><%:UPnP设备列表：%></h4>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th><%:协议%></th>
+                            <th><%:应用名称%></th>
+                            <th><%:客户端IP%></th>
+                            <th><%:内部端口%></th>
+                            <th><%:外部端口%></th>
+                        </tr>
+                    </thead>
+                    <tbody id="upnplist">
+                        <td class="center" colspan="5"><%:查询中...%></td>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <%include("web/inc/footer")%>
+</div>
+<%include("web/inc/g.js")%>
+<script>
+var modelUpnp = (function(){
+    function upnpStatus(){
+        $.getJSON('<%=luci.dispatcher.build_url("api", "xqsystem", "upnp")%>', {}, function(rsp){
+            if (rsp.code == 0) {
+                var btnUpnp = $('#upnpswitch')[0],
+                    listUpnp = $('#upnplist');
+                if (rsp.status == 1) {
+                    btnUpnp.className = 'btn-switch btn-switch-on';
+                }else{
+                    btnUpnp.className = 'btn-switch btn-switch-off';
+                }
+                if ( $.isArray(rsp.list) && rsp.list.length > 0) {
+                    var tpml = '<tr><td>{$protocol}</td><td>{$name}</td><td>{$ip}</td><td>{$cport}</td><td>{$rport}</td></tr>',
+                        list = [];
+                    for (var i = 0; i < rsp.list.length; i++) {
+                        var item = StringH.tmpl(tpml, rsp.list[i]);
+                        list.push(item);
+                    };
+                    listUpnp.html(list.join(''));
+                }else{
+                    var empty = rsp.status == 1 ? '<%:没有UPnP设备%>' : '<%:UPnP未开启%>';
+                    listUpnp.html('<tr><td colspan="5" class="center">'+ empty +'</td></tr>');
+                }
+            }
+        });
+    }
+
+    function upnpSwitch(){
+        var btnUpnp = $('#upnpswitch');
+        btnUpnp.on('click', function(e){
+            e.preventDefault();
+            var st = $(this).hasClass('btn-switch-on') ? 0 : 1,
+                btn = this;
+            $.getJSON('<%=luci.dispatcher.build_url("api", "xqsystem", "upnp_switch")%>', {'switch': st}, function(rsp){
+
+                if (rsp.code == 0) {
+                    upnpStatus();
+                }
+            });
+        });
+    }
+
+    return {
+        init : function(){
+            upnpStatus();
+            upnpSwitch();
+        }
+    }
+}());
+$(function(){
+    modelUpnp.init();
+});
+</script>
+</body>
+</html>

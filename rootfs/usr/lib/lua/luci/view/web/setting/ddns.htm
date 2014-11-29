@@ -1,0 +1,516 @@
+<%
+--[[
+    Info    路由器DDNS设置
+]]--
+local ver = require("xiaoqiang.XQVersion").webVersion
+local xqlanwanutil = require "xiaoqiang.util.XQLanWanUtil"
+local remote_addr = luci.http.getenv("REMOTE_ADDR")
+local mac = string.upper(luci.sys.net.ip4mac(remote_addr))
+local macdefault = string.upper(xqlanwanutil.getDefaultMacAddress())
+%>
+<%include("web/inc/head")%>
+<title><%:小米路由器%></title>
+<meta name="viewport" content="width=1200">
+<link href="<%=resource%>/web/css/bc.css?v=<%=ver%>" rel="stylesheet">
+<link href="<%=resource%>/web/css/ddns.css?v=<%=ver%>" rel="stylesheet">
+</head>
+<body>
+<div id="doc">
+    <%include("web/inc/header")%>
+    <%include("web/inc/nav_set")%>
+    <div id="bd">
+        <div class="mod-set mod-ddns" id="modSetDDNS">
+            <div class="hd">
+                <h3><%:DDNS%></h3>
+            </div>
+            <div class="bd">
+                <div class="section">
+
+                </div>
+                <div class="section">
+                    <h4><%:服务列表：%></h4>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th><%:主机名称%></th>
+                                <th><%:最近更新%></th>
+                                <th width="165" style="padding-left:15px;"><%:状态%></th>
+                                <th width="156" class="center"><%:操作%></th>
+                            </tr>
+                        </thead>
+                        <tbody id="serviceTbody">
+                        </tbody>
+                    </table>
+                    <div class="addserver-contral">
+                        <a href="#" id="btnAddServer" class="btn btn-dft"><span><%:添加服务%></span></a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <%include("web/inc/footer")%>
+
+</div>
+<%include("web/inc/g.js")%>
+<%include("web/inc/reboot.js")%>
+<script type="tmpl/html" id="tmplService">
+<tr data-service-id="{$id}" {if($enabled == 1)}data-enabled = "1"{/if}>
+    <td>{$domain}</td>
+    <td class="con">{$lastupdate}&nbsp;&nbsp;<a href="#" class="forceupdate"><%:手动更新%></a></td>
+    <td class="con">{if($enabled == 1)}<a class="btn-switch btn-switch-on close" href="#"></a>{else}<a class="btn-switch btn-switch-off open" href="#"></a>{/if}</td>
+    <td><a href="#" class="btn btn-dft edit"><span><%:编辑%></span></a><a href="#" class="btn btn-dft del"><span><%:删除%></span></a></td>
+</tr>
+</script>
+<script type="tmpl/html" id="tmplAddServer">
+<div class="dialog-form-wrap">
+    <form action="<%=luci.dispatcher.build_url("api", "xqnetwork", "add_server")%>" class="form form-ddns" name="addDdns" id="addDdns">
+        <div class="form-item-select">
+            <label class="k"><%:服务提供商%></label>
+            <span class="v">
+                <select id="servername" class="beautify" name="servername" style="width:209px;">
+                    <option value="2" selected="selected"><%:花生壳（oray.com）%></option>
+                    <option value="3"><%:公云（3322.org）%></option>
+                    <option value="4"><%:Dyndns.com%></option>
+                    <option value="1"><%:No-ip.com%></option>
+                </select>
+            </span>
+            <em class="t"></em>
+        </div>
+        <div class="form-item">
+            <label class="k"><%:用户名%></label>
+            <span class="v">
+                <input type="text" id="username" name="username" class="ipt-text" />
+            </span>
+            <em class="t"></em>
+        </div>
+        <div class="form-item">
+            <label class="k"><%:密码%></label>
+            <span class="v">
+                <input type="text" id="password" name="password" class="ipt-text" />
+            </span>
+            <em class="t"></em>
+        </div>
+        <div class="form-item">
+            <label class="k"><%:主机名称%></label>
+            <span class="v">
+                <input type="text" id="hostname" name="hostname" class="ipt-text" />
+            </span>
+            <em class="t"></em>
+        </div>
+        <div class="form-item">
+            <label class="k"><%:状态检查%></label>
+            <span class="v">
+                <input type="text" id="checkinterval" name="checkinterval" class="ipt-text" />
+            </span>
+            <em class="t" id="tipminute"><%:分钟%></em>
+        </div>
+        <div class="form-item">
+            <label class="k"><%:强制更新%></label>
+            <span class="v">
+                <input type="text" id="forceinterval" name="forceinterval" class="ipt-text" />
+            </span>
+            <em class="t" id="tiphour"><%:小时%></em>
+        </div>
+        <div class="form-contral">
+            <button type="submit" class="btn btn-primary btn-block" id="addDdnsSubmit"><span><%:确定%></span></button>
+        </div>
+    </form>
+</div>
+</script>
+<script type="tmpl/html" id="tmplEditServer">
+<div class="dialog-form-wrap">
+    <form action="<%=luci.dispatcher.build_url("api", "xqnetwork", "ddns_edit")%>" class="form form-ddns" name="editDdns" id="editDdns">
+        <input type="hidden" value="{$enabled}" id="enabled" />
+        <div class="form-item">
+            <label class="k"><%:服务提供商%></label>
+            <span class="v">
+                <input type="text" id="eservername" name="eservername" {if($id == 1)}value="<%:No-ip.com%>"{/if} {if($id == 2)}value="<%:花生壳（oray.com）%>"{/if} {if($id == 3)}value="<%:公云（3322.org）%>"{/if} {if($id == 4)}value="<%:Dyndns.com%>"{/if} class="ipt-text" data-postvalue="{$id}" disabled="disabled" />
+            </span>
+            <em class="t"></em>
+        </div>
+        <div class="form-item">
+            <label class="k"><%:用户名%></label>
+            <span class="v">
+                <input type="text" id="eusername" name="eusername" value="{$usernametext}" class="ipt-text" />
+            </span>
+            <em class="t"></em>
+        </div>
+        <div class="form-item">
+            <label class="k"><%:密码%></label>
+            <span class="v">
+                <input type="password" data-type="password"  value="{$passwordtext}"  id="epassword" name="epassword" class="ipt-text" />
+            </span>
+            <em class="t"></em>
+        </div>
+        <div class="form-item">
+            <label class="k"><%:主机名称%></label>
+            <span class="v">
+                <input type="text" id="ehostname" name="ehostname" value="{$hostnametext}" class="ipt-text" />
+            </span>
+            <em class="t"></em>
+        </div>
+        <div class="form-item">
+            <label class="k"><%:状态检查%></label>
+            <span class="v">
+                <input type="text" id="echeckinterval" name="echeckinterval" value="{$checkintervaltext}" class="ipt-text" />
+            </span>
+            <em class="t" id="tipminute"><%:分钟%></em>
+        </div>
+        <div class="form-item">
+            <label class="k"><%:强制更新%></label>
+            <span class="v">
+                <input type="text" id="eforceinterval" name="eforceinterval" value="{$forceintervaltext}" class="ipt-text" />
+            </span>
+            <em class="t" id="tiphour"><%:小时%></em>
+        </div>
+        <div class="form-contral">
+            <button type="submit" class="btn btn-primary btn-block" id="editDdnsSubmit"><span><%:确定%></span></button>
+        </div>
+    </form>
+</div>
+</script>
+<script>
+(function(){
+    var addServerDialog;
+    var editServerDialog;
+    $.sub('ddns:addServer', function(evt, data){
+        var formName = 'addDdns';
+        var validator = FormValidator.checkAll(formName, [
+            {
+                name: 'username',
+                display: '<%:用户名%>',
+                rules: 'required'
+            },{
+                name: 'password',
+                display: '<%:密码%>',
+                rules: 'required'
+            },{
+                name: 'hostname',
+                display: '<%:主机名称%>',
+                rules: 'required'
+            },{
+                name: 'checkinterval',
+                display: '<%:状态检查的分钟间隔%>',
+                rules: 'required|is_natural_no_zero'
+            },{
+                name: 'forceinterval',
+                display: '<%:强制更新的小时间隔%>',
+                rules: 'required|is_natural_no_zero'
+            }
+        ]);
+        if( validator ){
+            $('#addDdnsSubmit').addClass('btn-primary-disabled').prop('disabled', true).find('span').text('<%:保存中...%>');
+            var usernamevalue = $('#username').val(),
+                passwordvalue = $('#password').val(),
+                checkintervalvalue = $('#checkinterval').val(),
+                forceintervalvalue = $('#forceinterval').val(),
+                domainvalue = $('#hostname').val(),
+                idvalue = $('#servername').val();
+            $.ajax({
+                url: $('#'+formName).attr('action'),
+                type: 'GET',
+                data: {username: usernamevalue, password: passwordvalue, checkinterval: checkintervalvalue, forceinterval: forceintervalvalue, domain: domainvalue, enable: 1, id: idvalue},
+                dataType: 'json',
+                success: function(res){
+                    var msg;
+                    if(res.code == 0){
+                        // resetFormUI();
+                        addServerDialog.close();
+                        $.pub('ddns:get');
+                    }else{
+                        $('#addDdnsSubmit').removeClass('btn-primary-disabled').prop('disabled', false).find('span').text('<%:添加%>');
+                        msg = res.msg;
+                        alert(msg);
+                    }
+                }
+            });
+        }
+    });
+    $.sub('ddns:editServer', function(evt, data){
+        var formName = 'editDdns';
+        var evalidator = FormValidator.checkAll(formName, [
+            {
+                name: 'eusername',
+                display: '<%:用户名%>',
+                rules: 'required'
+            },{
+                name: 'epassword',
+                display: '<%:密码%>',
+                rules: 'required'
+            },{
+                name: 'ehostname',
+                display: '<%:主机名称%>',
+                rules: 'required'
+            },{
+                name: 'echeckinterval',
+                display: '<%:状态检查的分钟间隔%>',
+                rules: 'required|is_natural_no_zero'
+            },{
+                name: 'eforceinterval',
+                display: '<%:强制更新的小时间隔%>',
+                rules: 'required|is_natural_no_zero'
+            }
+        ]);
+        if( evalidator ){
+            $('#editDdnsSubmit').addClass('btn-primary-disabled').prop('disabled', true).find('span').text('<%:保存中...%>');
+            var usernamevalue = $('#eusername').val(),
+                passwordvalue = $('#epassword').val(),
+                checkintervalvalue = $('#echeckinterval').val(),
+                forceintervalvalue = $('#eforceinterval').val(),
+                domainvalue = $('#ehostname').val(),
+                idvalue = $('#eservername').attr('data-postvalue'),
+                enabled = $('#enabled').val();
+            $.ajax({
+                url: $('#'+formName).attr('action'),
+                type: 'GET',
+                data: {username: usernamevalue, password: passwordvalue, checkinterval: checkintervalvalue, forceinterval: forceintervalvalue, domain: domainvalue, enable: enabled, id: idvalue},
+                dataType: 'json',
+                success: function(res){
+                    var msg;
+                    if(res.code == 0){
+                        // resetFormUI();
+                        editServerDialog.close();
+                        $.pub('ddns:get');
+                    }else{
+                        $('#editDdnsSubmit').removeClass('btn-primary-disabled').prop('disabled', false).find('span').text('<%:添加%>');
+                        msg = res.msg;
+                        alert(msg);
+                    }
+                }
+            });
+        }
+    });
+    $.sub('ddns:delServer', function(evt, data){
+        var targetElement = data.targetElement;
+        var tr = $(targetElement).closest('tr');
+        var id = tr.attr('data-service-id');
+        // console.log(tr, id);
+        $.ajax({
+            url: '<%=luci.dispatcher.build_url("api", "xqnetwork", "del_server")%>',
+            type: 'GET',
+            dataType: 'json',
+            data: {id: id},
+            success: function(res){
+                if(res.code == 0){
+                    // tr.remove();
+                    $.pub('ddns:get');
+                }else{
+                    alert(res.msg);
+                }
+            }
+        });
+    });
+    $.sub('ddns:openOne', function(evt, data){
+        var targetElement = data.targetElement;
+        var tr = $(targetElement).closest('tr');
+        var id = tr.attr('data-service-id');
+        $.ajax({
+            url: '<%=luci.dispatcher.build_url("api", "xqnetwork", "server_switch")%>',
+            type: 'GET',
+            dataType: 'json',
+            data: {
+                id: id,
+                on: 1
+            },
+            success: function(res){
+                if(res.code == 0){
+                    setTimeout(function(){
+                        $.pub('ddns:get');
+                    }, 1000);
+                }else{
+                    alert(res.msg);
+                }
+            }
+        });
+    });
+    $.sub('ddns:closeOne', function(evt, data){
+        var targetElement = data.targetElement;
+        var tr = $(targetElement).closest('tr');
+        var id = tr.attr('data-service-id');
+        $.ajax({
+            url: '<%=luci.dispatcher.build_url("api", "xqnetwork", "server_switch")%>',
+            type: 'GET',
+            dataType: 'json',
+            data: {
+                id: id,
+                on: 0
+            },
+            success: function(res){
+                if(res.code == 0){
+                    $.pub('ddns:get');
+                }else{
+                    alert(res.msg);
+                }
+            }
+        });
+    });
+    $.sub('ddns:forceupdate', function(evt, data){
+        var targetElement = data.targetElement;
+        var tr = $(targetElement).closest('tr');
+        if( tr.attr('data-enabled') == 1 ){
+            $.ajax({
+                url: '<%=luci.dispatcher.build_url("api", "xqnetwork", "ddns_reload")%>',
+                type: 'GET',
+                dataType: 'json',
+                success: function(res){
+                    if(res.code == 0){
+                        $.pub('ddns:get');
+                        alert('<%:更新成功%>');
+                    }else{
+                        alert(res.msg);
+                    }
+                }
+            });
+        }else{
+            alert('<%:未启动无法强制更新%>');
+        }
+    });
+    $.sub('ddns:get', function(evt, data){
+        $.ajax({
+            url: '<%=luci.dispatcher.build_url("api", "xqnetwork", "ddns")%>',
+            type: 'GET',
+            dataType: 'json',
+            success: function(res){
+                var tpl = $('#tmplService').html();
+                if(res.code == 0){
+                    var list = res.list;
+                    var trarr = [];
+                    if($.isArray(list) && list.length > 0){
+                        for(var i = 0, len = list.length; i < len; i++){
+                            var tr = StringH.tmpl(tpl, {
+                                domain:StringH.encode4Html(list[i].domain),
+                                enabled: list[i].enabled,
+                                id: list[i].id,
+                                lastupdate: formatTime(list[i].lastupdate)
+                            });
+                            trarr.push(tr);
+                        }
+                        $('#serviceTbody').html(trarr.join(''));
+                    }else{
+                        $('#serviceTbody').html('<tr><td colspan="4"><%:还没有服务添加进来%></td></tr>');
+                    }
+                }
+                if(res.on == 0){
+                    // $.pub('ddns:close');
+                }
+                if(res.on == 1){
+                    // $( '#ddnsswitch' )[0].className = 'btn-switch btn-switch-on';
+                    // $( '#modSetDDNS .section' ).fadeIn();
+                }
+            }
+        });
+    });
+    $.sub('ddns:showAddDialog', function(evt, data){
+        addServerDialog = $.dialog({
+            title: '<%:添加服务%>',
+            content: $('#tmplAddServer').html(),
+            lock: true,
+            padding: 0
+        });
+        setTimeout(function(){
+            $.selectBeautify();
+            $.formInit();
+        }, 100);
+    });
+    $.sub('ddns:showEditDialog', function(evt, data){
+        var targetElement = data.targetElement;
+        var tr = $(targetElement).closest('tr');
+        var id = tr.attr('data-service-id');
+        $.ajax({
+            url: '<%=luci.dispatcher.build_url("api", "xqnetwork", "get_server")%>',
+            type: 'GET',
+            dataType: 'json',
+            data: {id: id},
+            success: function(res){
+                if(res.code == 0){
+                    console.log(res);
+                    var editServerDialogHTML = StringH.tmpl($('#tmplEditServer').html(), {
+                        id: id,
+                        usernametext: StringH.encode4HtmlValue(res.username),
+                        passwordtext: StringH.encode4HtmlValue(res.password),
+                        hostnametext: StringH.encode4HtmlValue(res.domain),
+                        checkintervaltext: StringH.encode4HtmlValue(res.checkinterval),
+                        forceintervaltext: StringH.encode4HtmlValue(res.forceinterval),
+                        enabled: StringH.encode4HtmlValue(res.enabled)
+                    });
+                    editServerDialog = $.dialog({
+                        title: '<%:编辑服务%>',
+                        content: editServerDialogHTML,
+                        lock: true,
+                        padding: 0
+                    });
+                    setTimeout(function(){
+                        $.selectBeautify();
+                        $.formInit();
+                    }, 100);
+                }else{
+                    alert(res.msg);
+                }
+            }
+        });
+    });
+    $.sub('addEvent', function(evt, data){
+        $('#btnAddServer').on('click', function(e){
+            e.preventDefault();
+            $.pub('ddns:showAddDialog');
+        });
+        //add submit
+        $('body').delegate('#addDdns', 'submit', function(e){
+            e.preventDefault();
+            $.pub('ddns:addServer');
+        });
+        //del
+        $('body').delegate('#serviceTbody .del', 'click', function(e){
+            e.preventDefault();
+            $.pub('ddns:delServer', {targetElement: this});
+        });
+        //edit click
+        $('body').delegate('#serviceTbody .edit', 'click', function(e){
+            e.preventDefault();
+            $.pub('ddns:showEditDialog', {targetElement: this});
+        });
+        //edit submit
+        $('body').delegate('#editDdns', 'submit', function(e){
+            e.preventDefault();
+            $.pub('ddns:editServer');
+        });
+        //open one server
+        $('body').delegate('#serviceTbody .open', 'click', function(e){
+            e.preventDefault();
+            $.pub('ddns:openOne', {targetElement: this});
+        });
+        //close one server
+        $('body').delegate('#serviceTbody .close', 'click', function(e){
+            e.preventDefault();
+            $.pub('ddns:closeOne', {targetElement: this});
+        });
+        //forceupdate
+        $('body').delegate('#serviceTbody .forceupdate', 'click', function(e){
+            e.preventDefault();
+            $.pub('ddns:forceupdate', {targetElement: this});
+        });
+    });
+    // 20140618150929 ==> 06/18/2014&nbsp;&nbsp;15:09
+    function formatTime(str){
+        if(!str){
+            return '<%:暂无更新%>';
+        }
+        var format = "";
+        var year = str.substr(0, 4);
+        var month = str.substr(4, 2);
+        var date = str.substr(6, 2);
+        var hour = str.substr(8, 2);
+        var minute = str.substr(10, 2);
+        var second = str.substr(12, 2);
+        format = month + '/' + date + '/' + year + '&nbsp;&nbsp;' + hour + ':' + minute;
+        return format;
+    }
+})();
+$(function(){
+    $.pub('ddns:get');
+    $.pub('addEvent');
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+#http://wiki.openwrt.org/doc/uci/system
+config system
+	option hostname 'XiaoQiang'
+	option timezone 'CST-8'
+	#log config for busybox syslod
+	option log_type 'file'
+	option log_size '100'
+	option log_rotate '1'
+	option log_file '/data/usr/log/messages'
+
+config timeserver 'ntp'
+	option enable_server '0'
+	list server '0.pool.ntp.org'
+	list server '1.pool.ntp.org'
+	list server '2.pool.ntp.org'
+	list server '3.pool.ntp.org'
+	list server '3.asia.pool.ntp.org'
+	list server '0.asia.pool.ntp.org'
+	list server '0.cn.pool.ntp.org'

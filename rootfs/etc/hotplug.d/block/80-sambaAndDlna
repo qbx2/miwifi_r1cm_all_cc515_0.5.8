@@ -1,0 +1,56 @@
+#!/bin/sh
+# Copyright (C) 2009-2010 OpenWrt.org
+# Copyright (C) 2010 Vertical Communications
+# This is free software, licensed under the GNU General Public License v2.
+# See /LICENSE for more information.
+#
+
+. /lib/functions/block.sh
+
+blkdev=`dirname $DEVPATH`
+device=`basename $DEVPATH`
+
+mount_flag=1
+if [ `basename $blkdev` != "block" ]; then
+	mount_flag=0
+else
+	substr=$(echo $device|cut -c-2)
+	partitions=`cat /proc/partitions | grep $device | wc -l`
+	if [ $substr = "sd" -a $partitions -le 1 ]; then
+		mount_flag=0
+	fi
+fi
+
+if [ $mount_flag -eq 0 ]; then
+
+	mountpoint=`sed -ne "s|^[^ ]*/$device ||; T; s/ .*//p" /proc/self/mounts | grep -v uploadfiles`
+
+	substr=$(echo $device|cut -c-2)
+	substr1=$(echo $device|cut -c-3)
+
+	if [ "$substr" = "sd" ]; then
+		case "$ACTION" in
+			add)
+				/usr/sbin/pushClient {\"type\":301} 小米路由发现新存储设备 检测到有新的存储设备连接小米路由。 1
+				local removable=$(cat /sys/block/$substr1/removable)
+				if [ "$removable"x == "1"x ]; then
+					/usr/sbin/pushClient {\"type\":24} 小米路由mini 建议使用移动硬盘获得更稳定的体验 1
+				fi
+				/usr/sbin/shareUpdate -a
+				/usr/sbin/datacenterClient -h localhost -p 9090 -i "{\"api\": 63, \"path\": \""$mountpoint"\", \"dev\": \""$device"\", \"isInsert\": true}"
+				;;
+			remove)
+				/usr/sbin/datacenterClient -h localhost -p 9090 -i "{\"api\": 63, \"path\": \""$mountpoint"\", \"dev\": \""$device"\", \"isInsert\": false}"
+				if [ "$mountpoint" != "" ]; then
+					/usr/sbin/pushClient {\"type\":302} 存储设备被强行拔出 请先在小米路由文件管理页面卸载后再拔出。 1
+					/usr/sbin/shareUpdate -r $mountpoint
+				fi
+
+				( cat /proc/mounts | grep uploadfiles | grep $device ) && umount /tmp/uploadfiles
+
+				umount -l /dev/$device                                                  
+				umount -l $mountpoint       
+				;;
+		esac	
+	fi
+fi

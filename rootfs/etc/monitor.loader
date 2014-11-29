@@ -1,0 +1,7 @@
+#!/bin/sh
+#
+if [ -x /usr/sbin/loadmonitor.sh ]
+	then
+	/usr/sbin/loadmonitor.sh start
+fi
+#

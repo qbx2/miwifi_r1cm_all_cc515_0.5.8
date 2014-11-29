@@ -1,0 +1,48 @@
+#!/bin/sh
+
+usage() {
+	echo "SetMac <wl1 | wl0 | eth> <mac>"
+	echo "example: SetMac wl1 00:11:22:33:44:55"
+}
+
+value=$2
+#A=expr substr "$2" 1 2
+#B=expr substr "$2" 4 5
+#C=expr substr "$2" 7 8
+#D=expr substr "$2" 10 11
+#E=expr substr "$2" 13 14
+#F=expr substr "$2" 16 17
+
+A=${value:0:2}
+B=${value:3:2}
+C=${value:6:2}
+D=${value:9:2}
+E=${value:12:2}
+F=${value:15:2}
+
+echo "$A:$B:$C:$D:$E:$F"
+
+
+case $1 in
+	wl0)
+	iwpriv wl0 e2p 04=$B$A
+	iwpriv wl0 e2p 06=$D$C
+	iwpriv wl0 e2p 08=$F$E
+	;;
+	wl1)
+	iwpriv wl1 e2p 04=$B$A
+	iwpriv wl1 e2p 06=$D$C
+	iwpriv wl1 e2p 08=$F$E
+	;;
+	eth)
+	iwpriv wl1 e2p 28=$B$A
+	iwpriv wl1 e2p 2a=$D$C
+	iwpriv wl1 e2p 2c=$F$E
+	;;
+	*)
+	usage
+	;;
+esac
+
+
+

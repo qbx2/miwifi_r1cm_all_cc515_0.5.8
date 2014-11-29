@@ -1,0 +1,71 @@
+
+config misc mount_bind_etc
+	option flag_name flag_format_overlay
+	option has_rsync 0
+	option do_fac_mode 1
+	option sync_etc 0
+
+config misc mount_jffs2
+	option do_mount 1
+
+config misc determine_ext_root
+	option skip_det_ext_root 1
+
+config misc wireless
+        option if_2G mt7620
+        option if_5G mt7612
+        option apclient_2G apcli0
+
+config misc httpd
+        option uhttpd 0
+
+config misc switchop
+        option start_lan 'mii_mgr -s -p 0 -r 0 -v 0x3100 >/dev/null;mii_mgr -s -p 1 -r 0 -v 0x3100 >/dev/null'
+	option stop_lan 'mii_mgr -s -p 0 -r 0 -v 0x3900 >/dev/null;mii_mgr -s -p 1 -r 0 -v 0x3900 >dev/null'
+	option wan_connect '/usr/sbin/ethstt 2>&1 | grep -q "port 4 up"'
+
+config misc quickpass
+       option ctf 0
+
+config misc log
+        option  redundancy_mode 0
+
+config misc boot
+	option syslog 1
+	option checkswap 0
+
+config misc firewall
+       option webinit 1
+
+config misc messagingagent
+        option thread_num 2
+
+config misc iwevent
+	option authorize 1
+
+config misc samba
+    option smb_tune 1
+    option smb_sndbuf 4194304
+    option smb_rcvbuf 4194304
+
+config misc initd
+	option cpulimit_en 0
+	option cpuctr_en 0
+	option trafctr_en 0
+	option networkdt_en 0
+
+config misc hardware
+        option recovery 0
+        option gpio 0
+        option flash_per 1
+	option bbs 'http://bbs.xiaomi.cn/forum-706-1.html'
+	option verify 'cd /tmp;mkxqimage -v '
+	option camera '/extdisks/sda1/'
+	option usbmode 1
+
+config misc config_bkup
+	option cfg_bkup_en 0
+
+config misc fantmp
+    option fantmp_en 0
+

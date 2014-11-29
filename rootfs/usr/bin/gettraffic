@@ -1,0 +1,8 @@
+#!/usr/bin/env lua
+local traffic = require("sysapi.traffic")
+local p = require("posix")
+
+local ret = traffic.get(arg[1])
+
+p.var_dump(ret)
+

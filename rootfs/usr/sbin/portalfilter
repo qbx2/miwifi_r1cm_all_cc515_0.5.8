@@ -1,0 +1,767 @@
+#!/usr/bin/env lua
+local uci = require("luci.model.uci")
+local posix = require("posix")
+local sys = require("luci.sys")
+local json = require("json")
+local os = require("os")
+local ipt = require("luci.sys.iptparser")
+
+local portaluci = uci.cursor_state()
+local networkuci = uci.cursor_state()
+--[[
+config portalfilter 'global'
+	option tcpport '8999'
+	option udpport '53'
+	option udpallowport '42000,39000,38000,37000,43000,67'
+	option freetime '111'
+	option state 'on'
+
+config portalfilter 'admin'
+
+]]
+
+function usage()
+	print([[Usage: portalfilter { -s|-t|-c|-tcp|-udp|--reload|--status|--reset|--clear }
+
+Hijack tcp and udp to custum ports within a predetermined time period
+
+	-s	client's ip or Hw address(set common user)
+	-t	set hijack time period(minutes)
+	-c	set portalfilter [on|off]
+	-a	client's ip or Hw address(set admin priviliges)
+	-r	client's ip or Hw address(remove admin record)
+	-d	client's ip or Hw address(remove common user record)
+	-tcp redirect tcp to this port  [>0]
+	-udp redirect udp to ports [>0]
+	--reload	reload all portalfilter rules.
+	--status	return the status of portalfilter
+	--reset	clear all client in config file and fw rule
+	--clear	clear timeout client in config file
+]])
+
+end
+
+function execmd(cmds,logflag)
+	local state = nil
+	cmds = string.gsub(cmds,";","")
+	state = os.execute(cmds .." 2>/dev/null")
+	if state ~= 0 then
+		if logflag == nil then
+			logger(3,cmds.." failed!")
+			for i=3,1,-1 do
+				state = os.execute(cmds.." 2>/dev/null")
+				if state == 0 then
+					return true
+				end
+			end
+		end
+		return false
+	else
+		return true
+	end
+end
+
+function logger(loglevel,msg)
+	posix.openlog("portalfilter","np",LOG_USER)
+	posix.syslog(loglevel,tostring(msg))
+	posix.closelog()
+end
+
+function getGlobal(gvalue)
+	local gpstate = portaluci:get("portalfilter","global",gvalue)
+	portaluci:unload("portalfilter")
+	return gpstate
+end
+
+function setGlobal(sgkey,sgvalue)
+	local sgflag = false
+	if portaluci:set("portalfilter","global",sgkey,sgvalue) and
+		portaluci:save("portalfilter") and
+		portaluci:commit("portalfilter") then
+		sgflag = true
+	end
+	portaluci:unload("portalfilter")
+	return sgflag
+end
+
+function setMac(sm,smmac,tstart,tstop)
+	local sgflag = false
+	if portaluci:set("portalfilter",sm,"mac") and
+		portaluci:set("portalfilter",sm,"mac",smmac) and
+		portaluci:set("portalfilter", sm, "start", tstart) and
+		portaluci:set("portalfilter", sm, "stop", tstop) and
+		portaluci:save("portalfilter") and
+		portaluci:commit("portalfilter") then
+		sgflag = true
+	end
+	portaluci:unload("portalfilter")
+	return sgflag
+end
+
+function checkIpFormat(ipstring)
+	if ipstring == nil or type(ipstring) ~= "string" then
+		return false
+	end
+
+	local ipsplit = {ipstring:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")}
+	if #ipsplit == 4 then
+		for _,v in pairs(ipsplit) do
+			if tonumber(v) < 0 or tonumber(v) > 255 then
+				return false
+			end
+		end
+		return true
+	else
+		return false
+	end
+end
+
+function findMac(srcstring)
+	if srcstring then
+		local macfmt = string.match(srcstring,"^%w%w%:%w%w%:%w%w%:%w%w%:%w%w%:%w%w$")
+		if macfmt then
+			return macfmt
+		end
+	end
+	if checkIpFormat(srcstring) then
+		local arplist = sys.net.arptable()
+		if type(arplist) == "table" then
+			for _,v in pairs(arplist) do
+				if type(v) == "table" then
+					if v["IP address"] == srcstring then
+						logger(6,string.format("%s<--->%s",srcstring,v["HW address"]))
+						return v["HW address"]
+					end
+				end
+			end
+			return false
+		else
+			return false
+		end
+	else
+		return false
+	end
+end
+
+function getLanIp()
+	local gli = portaluci:get("network","lan","ipaddr")
+	networkuci:unload("network")
+	return gli
+end
+
+function delMac(dmac)
+	dflag = false
+	if portaluci:delete("portalfilter",dmac) and
+		portaluci:save("portalfilter") and
+		portaluci:commit("portalfilter") then
+		dflag = true
+	end
+	return dflag
+end
+
+local manglePrefix = "iptables -t mangle "
+local mangleAddRule = manglePrefix.."-A "
+local mangleAddChain = manglePrefix.."-N "
+local mangleFlushChain = manglePrefix.."-F "
+local mangleReplaceRule = manglePrefix.."-R "
+local mangleDelChain = manglePrefix.." -X "
+local mangleDelRule = manglePrefix.."-D "
+local mangleportalchian = "fmwark_portalfilter_rule"
+local mangleMarkJump = "fwmark -j fmwark_portalfilter_rule"
+local manglejumpchain = "fwmark"
+local packetMark = " 0x1/0xffffffff"
+local timestop,limitrule,ip = nil,nil,nil
+local wtcports,wudports=getGlobal("tcpallowport"),getGlobal("udpallowport")
+local allowportsrule = " -p %s -m multiport --dports %s -j MARK --set-xmark %s"
+
+local natPrefix = "iptables -t nat "
+local natAddRule = natPrefix.."-A "
+local natAddChain = natPrefix.."-N "
+local natFlushChain = natPrefix.."-F "
+local natReplaceRule = natPrefix.."-R "
+local natDelChain = natPrefix.." -X "
+local natDelRule = natPrefix.."-D "
+local natPortalChain = "prerouting_portalfilter_rule"
+local natjumpchain = "prerouting_lan_rule"
+local natMarkJump = "prerouting_lan_rule -j prerouting_portalfilter_rule"
+local natinitrule = " ! -d "..getLanIp().."/32 -p %s -m mark ! --mark 0x1 -j REDIRECT --to-ports %s"
+local natTcpRedirectRule = string.format(natinitrule,"tcp",getGlobal("tcpport"))
+local natUdpRedirectRule = string.format(natinitrule,"udp",getGlobal("udpport"))
+
+-- @param is_reset reset all or just remove timeout client
+function clearTimeoutClient(is_reset)
+	local clearconfig = portaluci:get_all("portalfilter")
+	local cstate = getGlobal("state")
+	local rfreetime = tonumber(getGlobal("freetime"))
+	local comparetime = os.time()
+	for k,v in pairs(clearconfig) do
+		if string.match(k,"^%w%w%w%w%w%w%w%w%w%w%w%w$") then
+			if not is_reset then
+				if rfreetime > 0 then
+					if (rfreetime*60) + v["start"] < comparetime then
+						if not delMac(k) then
+							logger(6,string.format("uci del %s %s failed.",v["mac"],v["start"]))
+						end
+					end
+				end
+			else
+				if not delMac(k) then
+					logger(6,string.format("uci del %s %s failed.",v["mac"],v["start"]))
+				end
+			end
+		end
+	end
+end
+
+function whiteports(proto,protorule,whiteipt)
+	local whiteflag=false
+	local whiteportsoptions = { "multiport", "MARK","dports","set"}
+	local whiteportslist = { table="mangle",chain=mangleportalchian,target="MARK", protocol=proto,options=whiteportsoptions }
+	local whiteportsrule = whiteipt:find(whiteportslist)
+	if #whiteportsrule > 1 then
+		for i=#whiteportsrule,2,-1 do
+			execmd(string.format("%s %s %s",mangleDelRule,mangleportalchian,whiteportsrule[i]["index"]))
+			whiteflag=true
+		end
+	end
+	if #whiteportsrule == 1 then
+		execmd(string.format("%s %s %s %s",mangleReplaceRule,mangleportalchian,whiteportsrule[1]["index"],protorule))
+		whiteflag=true
+	end
+
+	if #whiteportsrule == 0 then
+		if execmd(string.format("%s %s %s",mangleAddRule,mangleportalchian,protorule)) then
+			whiteflag=true
+		else
+			flush()
+			logger(6,string.format("create %s allow ports rule failed.",proto))
+			return false
+		end
+	end
+	if whiteflag then
+		print("state:on")
+	end
+	return whiteflag
+end
+
+function flush()
+	execmd(string.format("%s %s",natDelRule,natMarkJump))
+	execmd(string.format("%s %s",natFlushChain,natPortalChain))
+	execmd(string.format("%s %s",natDelChain,natPortalChain))
+	execmd(string.format("%s %s",mangleFlushChain,mangleportalchian))
+	execmd(string.format("%s %s",mangleDelRule,mangleMarkJump))
+	execmd(string.format("%s %s",mangleDelChain,mangleportalchian))
+	print("state:off")
+	logger(6,"working on off state.")
+end
+
+function setGlobalFw(cont,natipt)
+	local gfwflag = false
+	if cont == "on" then
+		--nat
+		local natjumprule = { table="nat",chain=natjumpchain,protocol="all",target=natPortalChain}
+		local natredirrule = { table="nat",chain=natPortalChain,options={"mark", "match", "!", "0x1", "redir", "ports"}}
+		local natj = natipt:find(natjumprule)
+		local natr = natipt:find(natredirrule)
+
+		if #natj == 0 then
+			if not natipt:is_custom_target(natPortalChain) then
+				execmd(string.format("%s %s",natAddChain,natPortalChain))
+			end
+			if not execmd(string.format("%s %s",natAddRule,natMarkJump)) then
+				logger(6,"create nat jump rule failed.")
+				 return false
+			end
+		end
+
+		if #natj > 1 then
+			for i=#natj,2,-1 do
+				execmd(string.format("%s %s %s",natDelRule,natjumpchain,natj[i]["index"]))
+			end
+		end
+
+		if #natr ~= 2 then
+			if execmd(string.format("%s %s",natFlushChain,natPortalChain)) and
+				execmd(string.format("%s %s %s",natAddRule,natPortalChain,natTcpRedirectRule)) and
+				execmd(string.format("%s %s %s",natAddRule,natPortalChain,natUdpRedirectRule)) then
+				gfwflag=true
+			else
+				logger(6,"create chain prerouting_portalfilter_rule failed.")
+				return false
+			end
+		else
+			if execmd(string.format("%s %s %s %s",natReplaceRule,natPortalChain,natr[1]["index"],natTcpRedirectRule)) and
+				execmd(string.format("%s %s %s %s",natReplaceRule,natPortalChain,natr[2]["index"],natUdpRedirectRule)) then
+				gfwflag=true
+			else
+				flush()
+				return false
+			end
+		end
+		--mangle
+		local manglejumprule = {table="mangle",chain=manglejumpchain,protocol="all",target=mangleportalchian}
+		local m1 = natipt:find(manglejumprule)
+		if #m1 > 1 then
+			for i=#m1,2,-1 do
+				execmd(string.format("%s %s %s",mangleDelRule,manglejumpchain,m1[i]["index"]))
+			end
+		end
+
+		if #m1 == 0 then
+			if not natipt:is_custom_target(mangleportalchian) then
+				execmd(string.format("%s %s",mangleAddChain,mangleportalchian))
+			end
+			if not execmd(string.format("%s %s",mangleAddRule,mangleMarkJump)) then
+				logger(6,"create mangle jump rule failed.")
+				flush()
+				return false
+			end
+		end
+		--check whitelist ports
+		if wtcports then
+			if not whiteports("tcp",string.format(allowportsrule,"tcp",wtcports,packetMark),natipt) then
+				flush()
+				return false
+			end
+		else
+			logger(6,"config tcpallowports null, skip to allow tcp ports.")
+		end
+
+		if wudports then
+			if not whiteports("udp",string.format(allowportsrule,"udp",wudports,packetMark),natipt) then
+				flush()
+				return false
+			end
+		else
+			--udp ports can not be null logical
+			logger(6,"config error udpallowports can not be null. ")
+			flush()
+			return false
+		end
+	else
+		flush()
+		return false
+	end
+	if gfwflag then
+		setAdminRule()
+	end
+	return gfwflag
+end
+
+function contains(table, element)
+	for _, value in pairs(table) do
+		if value == element then
+			return true
+		end
+	end
+	return false
+end
+
+function getAdmin()
+	local gastate = portaluci:get_list("portalfilter", "admin", "macaddr")
+	portaluci:unload("portalfilter")
+	return gastate
+end
+
+function setAdmin(macaddr)
+	local sAflag = false
+	local tmpadmin = getAdmin() or {}
+	if not contains(tmpadmin,macaddr) then
+		table.insert(tmpadmin,macaddr)
+		if portaluci:set_list("portalfilter", "admin", "macaddr", tmpadmin) and
+			portaluci:save("portalfilter") and
+			portaluci:commit("portalfilter") then
+			sAflag = true
+		end
+		portaluci:unload("portalfilter")
+	else
+		sAflag = true
+	end
+	return sAflag
+end
+
+function delAdmin(macaddr)
+	if execmd(string.format("uci del_list portalfilter.admin.macaddr=%s",macaddr)) and execmd("uci commit portalfilter") then
+		return true
+	else
+		return false
+	end
+end
+
+function flush_admin()
+   return execmd("uci delete portalfilter.admin.macaddr") and execmd("uci commit portalfilter")
+end
+
+function setMarkRule(macaddr,freetime,timestart,mangleipt)
+	
+	local markflag=false
+	local iptoption = { "MAC", "MARK",string.upper(macaddr),"set"}
+	local defrule = { table="mangle",chain=mangleportalchian,target="MARK", protocol="all",options=iptoption }
+	local defruletable = mangleipt:find(defrule)
+	local tlen = table.getn(defruletable)
+
+	if freetime == 0 then
+		limitrule = string.format(" -m mac --mac-source %s -j MARK --set-xmark %s",macaddr,packetMark)
+	else
+		timestop = timestart + (freetime*60)
+		limitrule = string.format(" -m mac --mac-source %s -m time --datestart %s --datestop %s --kerneltz -j MARK --set-xmark %s",macaddr,os.date("%Y-%m-%dT%H:%M:%S",timestart),os.date("%Y-%m-%dT%H:%M:%S",timestop),packetMark)
+	end
+
+	if tlen > 1 then
+		for i=tlen,2,-1 do
+			execmd(string.format("%s %s %s",mangleDelRule,mangleportalchian,defruletable[i]["index"]))
+		end
+		if not execmd(string.format("%s %s %s %s",mangleReplaceRule,mangleportalchian,defruletable[1]["index"],limitrule)) then
+			logger(6,string.format("add rule failed. %s",macaddr))
+			return false
+		else
+			markflag=true
+		end
+	end
+
+	if tlen == 1 then
+		if execmd(string.format("%s %s %s %s",mangleReplaceRule,mangleportalchian,defruletable[1]["index"],limitrule)) then
+			markflag=true
+		else
+			logger(6,string.format("add rule failed. %s",macaddr))
+			return false
+		end
+	end
+
+	if tlen == 0 then
+		if execmd(string.format("%s %s %s",mangleAddRule,mangleportalchian,limitrule)) then
+			markflag=true
+		else
+			logger(6,string.format("add rule failed. %s",macaddr))
+			return false
+		end
+	end
+	clearConntrack(macaddr)
+	return markflag
+end
+
+function clearConntrack(cmac)
+	local arplist = sys.net.arptable() or { }
+	for e,r in pairs(arplist) do
+		if string.lower(r["HW address"]) == string.lower(cmac) then
+			if not execmd(string.format("/usr/sbin/conntrack -D -s %s >/dev/null 2>/dev/null",r["IP address"])) then
+				logger(6,string.format("clear conntrack session %s <-.->%s",r["IP address"],cmac))
+			end
+		end
+	end
+end
+
+function setAdminRule()
+	local admins = getAdmin()
+	if #admins == 0 then
+		local arplist = sys.net.arptable() or { }
+		if #arplist == 0 then
+            print("no machine online & admin list null,turn on portalfilter failed.")
+			flush()
+			logger(6,"admin list null,turn on potalfilter failed.")
+			os.exit(1)
+		end
+		for k,v in pairs(arplist) do
+			if v["Device"] == "br-lan" then
+				setMarkRule(v["HW address"],0,os.time(),ipt.IptParser(4))
+				setAdmin(v["HW address"])
+			end
+		end
+	else
+		for k,v in pairs(admins) do
+			setMarkRule(v,0,os.time(),ipt.IptParser(4))
+		end
+	end
+end
+
+function delAdminRule(adminmacaddr,filefd)
+	local adminflag = false
+	local myrule,ccmark=nil,""
+	if getGlobal("freetime") ~= "0" then
+		ccmark= " -m time"
+	elseif getGlobal("freetime") == "0" then
+		ccmark= ""
+	end
+	local matchrule =string.gsub(string.format("%s -m mac --mac-source %s%s .*-j MARK --set-xmark%s",mangleportalchian,adminmacaddr,ccmark,packetMark),"-","%%-")
+	for k,v in pairs(filefd) do
+		myrule = string.match(v,matchrule)
+		if myrule then
+			if execmd(string.format("%s %s",mangleDelRule,myrule)) then
+				logger(6,string.format("remove rule %s ok.",adminmacaddr))
+				adminflag = true
+			else
+				logger(6,string.format("remove rule %s failed.",adminmacaddr))
+			end
+		end
+	end
+	return adminflag
+end
+
+function reloadAllRule()
+	local rlstat = getGlobal("state")
+	if rlstat == "on" then
+		if setGlobalFw(rlstat,ipt.IptParser(4)) then
+			for k,v in pairs(portaluci:get_all("portalfilter")) do
+				if string.match(k,"^%w%w%w%w%w%w%w%w%w%w%w%w$") then
+					if not setMarkRule(v["mac"],tonumber(getGlobal("freetime")),v["start"],ipt.IptParser(4)) then
+						logger(3,"reloadAll,set "..v["mac"].." failed.")
+					end
+				end
+			end
+		else
+			logger(6,"reload all config failed.switch to on state failed.")
+			return 1
+		end
+	else
+		logger(6,"state off,no reload.")
+		return 1
+	end
+	return 0
+end
+
+function kickaction(kamac,cmark)
+	local adminruletable = {}
+	local deladminipt = io.popen(string.format("%s -S %s 2>/dev/null",manglePrefix,mangleportalchian))
+	if deladminipt then
+		for line in deladminipt:lines() do
+			table.insert(adminruletable,line)
+		end
+		deladminipt:close()
+	end
+
+	local fmac  = findMac(kamac)
+	if fmac then
+		local indmac = string.gsub(fmac,":","")
+		if cmark == "admin" then
+			if delAdmin(string.lower(fmac)) then
+				logger(6,string.format("remove %s from config ok.",fmac))
+				if delAdminRule(string.upper(fmac),adminruletable) then
+					logger(6,string.format("remove %s from firewall ok.",fmac))
+					os.exit(0)
+				else
+					logger(6,string.format("remove %s from firewall failed.",fmac))
+					os.exit(1)
+				end
+			else
+				logger(6,string.format("remove admin from config failed. %s",kamac))
+				os.exit(1)
+			end
+		elseif cmark == "common" then
+			if delMac(string.lower(indmac)) then
+				logger(6,string.format("remove %s from config ok.",indmac))
+				if delAdminRule(string.upper(fmac),adminruletable) then
+					logger(6,string.format("remove common user from firewall ok. %s",kamac))
+					os.exit(0)
+				else
+					logger(6,string.format("remove common user from firewall failed. %s",kamac))
+					os.exit(1)
+				end
+			else
+				logger(6,string.format("remove common user from config failed. %s",kamac))
+				os.exit(1)
+			end
+		end
+	end
+end
+
+function main()
+	local state,time,control,reload,tport,uport,status,src,clear,admin,remove,kickout
+	if #arg == 0 or arg[1] == "-h" or arg[1] == "--help" then
+		usage()
+		os.exit(1)
+	end
+
+	for k,v in pairs(arg) do
+		if v == "-tcp"  then
+			tport = arg[k+1]
+		end
+		if v == "-udp"  then
+			uport = arg[k+1]
+		end
+		if v == "-c" then
+			control = arg[k+1]
+		end
+		if v == "-s" then
+			src = arg[k+1]
+		end
+
+		if v == "-t" then
+			time = arg[k+1]
+		end
+
+		if v == "--reload" then
+			reload = true
+		end
+		if v == "--status" then
+			status = true
+		end
+		if v == "--clear" then
+			clear  = true
+		end
+		if v == "--reset" then
+			reset = true
+		end
+		if v == "-a" then
+			admin = arg[k+1]
+		end
+		if v == "-r" then
+			remove = arg[k+1]
+		end
+		if v == "-d" then
+			kickout = arg[k+1]
+		end
+	end
+
+	if tport then
+		if tonumber(tport) == "number" then
+			if not setGlobal("tcpport",tport) then
+				logger(6,"uci set tcpport "..tport.." failed.")
+			end
+		end
+	end
+
+	if uport then
+		if tonumber(uport) == "number" then
+			if not setGlobal("udpport",uport) then
+				logger(6,"uci set udpport "..uport.." failed.")
+			end
+		end
+	end
+
+	if time then
+		if tonumber(time) >= 0 then
+			if time == getGlobal("freetime") then
+				logger(6,"the same value,no change:"..time)
+				os.exit(0)
+			end
+			if not setGlobal("freetime",time) then
+				logger(6,"uci set freetime".." failed.")
+				os.exit(1)
+			end
+			reloadAllRule() -- ignore return value
+		end
+	end
+
+	if control == "on"  or control == "off" then
+		if setGlobal("state",control) then
+			local tcport = getGlobal("tcpport")
+			local udport = getGlobal("udpport")
+			if tcport and udport then
+				if setGlobalFw(control,ipt.IptParser(4)) then
+					clearTimeoutClient()
+					local portalconfig = portaluci:get_all("portalfilter")
+					local rfreetime = getGlobal("freetime")
+					local iptpser = ipt.IptParser(4)
+					for k,v in pairs(portalconfig) do
+						if string.match(k,"^%w%w%w%w%w%w%w%w%w%w%w%w$") then
+							if not setMarkRule(v["mac"],tonumber(rfreetime),v["start"],iptpser) then
+								logger(3,"turn on portalfilter,set "..v["mac"].." failed.")
+							end
+						end
+					end
+					logger(6,"state: on")
+					os.exit(0)
+				else
+				        clearTimeoutClient(true) -- terrible name, remove guest's config
+					flush_admin()
+				        logger(6,"state: off")
+					os.exit(0)
+				end
+			else
+				print("config error.")
+				logger(6,"config error.")
+				os.exit(1)
+			end
+		else
+			logger(6,string.format("uci set state %s failed.",control))
+			os.exit(1)
+		end
+	end
+
+	if admin then
+		local adminmac  = findMac(admin)
+		if setAdmin(adminmac) then
+			if not setADminRule(adminmac) then
+				logger(6,string.format("set admin priviliges failed. %s",admin))
+				os.exit(1)
+			else
+				print("set admin ok. "..admin)
+				logger(6,string.format("set admin ok. %s",admin))
+				os.exit(0)
+			end
+		else
+			print("uci save admin priviliges failed."..admin)
+			logger(6,string.format("uci save admin priviliges failed. %s",admin))
+			os.exit(1)
+		end
+	end
+
+	if status then
+		local pstat = getGlobal("state")
+		if pstat then
+			print(pstat)
+			os.exit(1)
+		elseif setGlobal("state","off") then
+			print("off")
+			os.exit(1)
+		else
+			print("I/O error")
+			logger(6,"I/O error.")
+			os.exit(1)
+		end
+	end
+
+	if src then
+		local fmtmac = ""
+		local fmac  = findMac(src)
+		if fmac then
+			if contains(getAdmin() or {},fmac) then
+				print(string.format("admin role,can't add to common user list.",fmac))
+				logger(6,string.format("admin role,can't add to common user list.",fmac))
+				os.exit(1)
+			end
+			fmtmac = string.gsub(fmac,":","")
+		else
+			print("mac address not found:"..tostring(src))
+			logger(3,"mac address not found,exit. "..tostring(src))
+			os.exit(1)
+		end
+		local st = os.time()
+		local ft = getGlobal("freetime")
+		local fstop = 0
+
+		if fmac and fmtmac and ft then
+			if tonumber(ft) ~= 0 then
+				fstop = ft
+			end
+			if setMac(fmtmac,fmac,st,fstop) then
+				setMarkRule(fmac,tonumber(ft),st,ipt.IptParser(4))
+			else
+				logger(6,string.format("uci set %s<-->%s failed.",src,tostring(smmac)))
+			end
+		end
+	end
+
+	if clear then
+		logger(6,"clear function")
+		clearTimeoutClient()
+	end
+
+	if reset then
+		clearTimeoutClient(true)
+		execmd(string.format("%s %s",mangleFlushChain,mangleportalchian))
+		if reloadAllRule() ~= 0 then os.exit(1) end
+	end
+
+	if reload then
+		clearTimeoutClient()
+		if reloadAllRule() ~= 0 then os.exit(1) end
+	end
+	if kickout then
+		kickaction(kickout,"common")
+	end
+	if remove then
+		kickaction(remove,"admin")
+	end
+end
+main()

@@ -1,0 +1,44 @@
+#!/bin/sh /etc/rc.common
+
+START=98
+STOP=20
+
+#export command line for /usr/sbin/supervisord
+export PROCLINE="/usr/sbin/datacenter"
+
+start() {
+
+	#删除记录插件pid的文件
+	rm -f /userdisk/appdata/plugin_id_info.cfg
+
+	#处理一部分data文件夹没有写权限的问题
+	chmod 777 /userdisk/data
+	
+	mkdir -p /userdisk/privacyData/
+	chmod 777 /userdisk/privacyData/
+	
+	/usr/sbin/supervisord start
+	return $?
+}
+
+restart() {
+	stop
+	sleep 1
+	start
+	return $?
+}
+
+shutdown() {
+	stop
+	return $?
+}
+
+stop() {
+	/usr/sbin/supervisord stop
+	return $?
+}
+status() {
+	/usr/sbin/supervisord status
+	return $?
+}
+#

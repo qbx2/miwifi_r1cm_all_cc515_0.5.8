@@ -1,0 +1,77 @@
+#!/bin/sh /etc/rc.common
+
+START=20
+STOP=90
+
+SERVICE_DAEMONIZE=1
+SERVICE_WRITE_PID=1
+
+start() {
+	stop
+	[ -e /proc/sys/kernel/core_pattern ] && {
+		ulimit -c unlimited
+		echo '/tmp/%e.%p.%s.%t.core' > /proc/sys/kernel/core_pattern
+	}
+	service_start /sbin/netifd
+
+	setup_switch() { return 0; }
+
+	include /lib/network
+
+	find=`ps | grep '\/sbin\/netifd' | grep -v 'grep' | awk '{print $1}' | wc -l`
+	if [ "$find" = "1" ]
+	then
+		pid=`ps | grep '\/sbin\/netifd' | grep -v 'grep' | awk '{print $1}'`
+		chrt -r -p 99 $pid
+	fi
+
+	find=`ps | grep 'udhcpc' | grep -v 'grep' | awk '{print $1}' | wc -l`
+	if [ "$find" = "1" ]
+	then
+		pid=`ps | grep 'udhcpc' | grep -v 'grep' | awk '{print $1}'`
+		chrt -r -p 99 $pid
+	fi
+
+	find=`ps | grep 'pppd' | grep -v 'grep' | awk '{print $1}' | wc -l`
+	if [ "$find" = "1" ]
+	then
+		pid=`ps | grep 'pppd' | grep -v 'grep' | awk '{print $1}'`
+		chrt -r -p 99 $pid
+	fi
+
+#	sleep 5
+
+	{
+		/sbin/wifi down >/dev/null 2>&1
+		/sbin/wifi up
+	}&
+	setup_switch
+
+	return $?
+}
+
+restart() {
+	ifdown -a
+	sleep 1
+	start
+}
+
+shutdown() {
+	wifi down
+	ifdown -a
+	# sleep to let PPPoE clean up its sesssion.
+	config_load network
+	config_get proto wan proto && [ "$proto" == "pppoe" ] && sleep 1
+	stop
+}
+
+stop() {
+	/usr/sbin/wan.monitor stop setdown 2>/dev/null &
+	service_stop /sbin/netifd
+}
+
+reload() {
+	ubus call network reload
+	/sbin/wifi down
+	/sbin/wifi up
+}

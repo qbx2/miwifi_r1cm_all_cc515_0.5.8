@@ -1,0 +1,184 @@
+#!/bin/sh
+#
+export LANG=C
+#
+#TODO: merge into dnsmasq.init
+#
+. /lib/lib.scripthelper.sh
+#
+. /lib/lib.wan.monitor.sh
+#
+getdnsmasqpid(){
+	echo $(ps w|grep '/usr/sbin/dnsmasq'|grep -v grep|grep '/var/etc/dnsmasq.conf'|awk '{print $1}')
+}
+dnsmasqsetconf(){
+	dnsmasqop="$1"
+	#
+	#do not restart dnsmasq, only change iptables rules
+	#/etc/init.d/dnsmasq restart
+	#
+	/usr/sbin/dnsmasq.catchall $dnsmasqop
+	#
+	return $?
+}
+daemonstop(){
+	#
+	dlog "INFO: stop dns catch all for monitor stopped."
+	dnsmasqsetconf stop
+	return 0
+}
+#
+op=$1
+if [ "$op" = 'boot' ]
+	then
+	op='start'
+fi
+#
+export SCRIPTNICE=0
+#run in daemon
+procdaemon mute
+#
+if [ "$(uci get xiaoqiang.common.INITTED 2>/dev/null)" != 'YES' ]
+	then
+	dlog "WARNING: DNS catch all disabled for device no initialed."
+	#will start by /usr/sbin/firewall.webinitrdr
+	exit 0
+fi
+#
+dlog "INFO: dns catch all monitor $op"
+#
+/usr/sbin/dnsmasq.catchall start
+#
+#TODO: clean up vars
+preid="ZzzZZzZzzzZ"
+warned=0
+failcnt=0
+traffic_up='off'
+vpndowncnt=0
+wandowncnt=0
+oldvpngw=''
+waniswork=0
+vpniswork=0
+dnsiswork=0
+nginxcacheup=0
+nginxcachefailed=0
+oldlannet=''
+lannet=''
+vtunup=0
+errordelay=30
+allowvpn=0
+while [ : ]
+do
+
+	sleep 5
+	#set default
+	TRAFFIC_DNS='on'
+	if [ -s "$MONITORCFGFILE" ]
+		then
+		. $MONITORCFGFILE
+	fi
+	if [ "$TRAFFIC_DNS" = 'off' ]
+		then
+		#
+		test $warned -eq 0 && dlog "WARNING: dns catch all manual switch to off."
+		test $warned -eq 0 && dnsmasqsetconf stop # "$TRAFFIC_DNS" "$traffic_up"
+		traffic_up='off'
+		warned=1
+		continue
+	fi
+	islinkup 'dns'
+	dnsiswork=$?
+	#0 for down
+	if [ $dnsiswork -eq 0 ]
+		then
+		if [ "$traffic_up" = 'on' ]
+			then
+			dnspid=$(getdnsmasqpid)
+			if [ -z "$dnspid" ]
+				then
+				slog dnsmasqerr dlog "WARNING: dnsmasq server no running, switch to off."
+				dnsmasqsetconf stop
+				sleep 10
+				dlog "INFO: try to restart dnsmasq after $errordelay seconds."
+			else
+				slog dnsmasqerr dlog "ERROR: dnsmasq server no function, switch to off."
+				dnsmasqsetconf stop
+				dlog "INFO: try to restart dnsmasq after $errordelay seconds."
+			fi
+		fi
+		traffic_up='off'
+		sleep $errordelay
+		let errordelay=$errordelay+10
+		test $errordelay -ge 120 && errordelay=120
+		/etc/init.d/dnsmasq restart
+		wcnt=0
+		timeout=30
+		while [ $wcnt -le $timeout ]
+		do
+			dnspid=$(getdnsmasqpid)
+			if [ -n "$dnspid" ]
+				then
+				break
+			fi
+			let wcnt=$wcnt+1
+		done
+		dnspid=$(getdnsmasqpid)
+		if [ -n "$dnspid" ]
+			then
+			dlog "INFO: dnsmasq restarted, PID=$dnspid."
+		else
+			dlog "ERROR: dnsmasq restart failed after $timeout seconds."
+		fi
+		continue
+	else
+		slog dnsmasqerr release
+		errordelay=30
+	fi
+	#ret = 0 for down
+	islinkup 'wan'
+	waniswork=$?
+	if [ $dnsiswork -ne 0 -a $waniswork -ne 0 ]
+		then
+		if [ "$traffic_up" != 'on' ]
+			then
+			dlog "INFO: dns catch all switch to on."
+			dnsmasqsetconf start
+			traffic_up='on'
+		fi
+		warned=0
+	else
+		continue
+	fi
+	islinkup 'vpn'
+	vpniswork=$?
+	#0 for down
+	if [ $vpniswork -eq 0 ]
+		then
+		if [ $allowvpn -ne 0 ]
+			then
+			allowvpn=0
+			dlog "INFO: dns catch all reload to disable vpn traffic."
+			dnsmasqsetconf start
+			traffic_up='on'
+		fi
+	else
+		if [ $allowvpn -eq 0 ]
+			then
+			allowvpn=1
+			dlog "INFO: dns catch all reload to enable vpn traffic."
+			dnsmasqsetconf start
+			traffic_up='on'
+		fi
+	fi
+	iptables -L PREROUTING -t nat 2>/dev/null| grep -qi 'DNSCATCHALL'
+	if [ $? -ne 0 ]
+		then
+		#re-enable
+		dlog "INFO: dns catch all reload for REDIRECT rule lost."
+		dnsmasqsetconf start
+		traffic_up='on'
+		sleep $errordelay
+	fi
+done
+exit 0
+#

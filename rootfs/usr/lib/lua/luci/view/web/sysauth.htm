@@ -1,0 +1,119 @@
+<%
+    local ver = require("xiaoqiang.XQVersion").webVersion
+    local XQSysUtil = require "xiaoqiang.util.XQSysUtil"
+    if not XQSysUtil.getInitInfo() then
+        luci.http.redirect(luci.dispatcher.build_url("web", "init","hello"))
+    end
+
+    local router_name = XQSysUtil.getRouterName() or "小米路由器"
+    local isBinded = (XQSysUtil.getPassportBindInfo() and 'true') or 'false'
+    local logType = 1
+    if logtype then
+        logType = tonumber(logtype) or 1
+    end
+
+    local remote_addr = luci.http.getenv("REMOTE_ADDR")
+    local mac = luci.sys.net.ip4mac(remote_addr)
+%>
+<%include("web/inc/head")%>
+    <title><%:小米路由器%></title>
+    <meta name="viewport" content="width=1024">
+    <link href="<%=resource%>/web/css/bc.css?v=<%=ver%>" rel="stylesheet">
+    <link href="<%=resource%>/web/css/login.css?v=<%=ver%>" rel="stylesheet">
+</head>
+<body>
+<div id="doc">
+    <div id="hd">
+        <div class="logo"><img src="<%=resource%>/web/img/logo.png"></div>
+        <a class="lnk-website" href="http://www1.miwifi.com" target="_blank"><%:访问官网%></a>
+    </div>
+    <div id="bd">
+        <div class="mod-login">
+            <div class="pic"></div>
+            <h1 class="title"><%:欢迎使用小米路由器%></h1>
+            <form id="rtloginform" name="rtloginform" method="post" action="#" class="form form-login" autocomplete="off">
+                <div class="form-item">
+                    <span class="v"><input id="password" class="ipt-text" type="password" name="password" autocomplete="off" placeholder="<%:请输入路由器管理密码%>"></span>
+                    <span class="t"></span>
+                </div>
+                <div class="form-contral">
+                    <button type="submit" id="btnRtSubmit" class="btn btn-primary btn-block"><span><%:登录%></span></button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <%include("web/inc/footermini")%>
+</div>
+<%include("web/inc/g.js")%>
+<script src="/js/validate.js?v=<%=ver%>"></script>
+<script>
+$(function(){
+
+    $( '#password' ).focus();
+
+    $( '#btnRtSubmit' ).on( 'wait', function( e ) {
+        this.className = 'btn btn-primary-disabled btn-block';
+        this.disabled = true;
+        $('span', this).text('<%:登录中...%>');
+        $( '#password' )[0].disabled = true;
+    });
+
+    $( '#btnRtSubmit' ).on( 'done', function( e ) {
+        this.className = 'btn btn-primary btn-block';
+        this.disabled = false;
+        $('span', this).text('<%:登录%>');
+        $( '#password' )[0].disabled = false;
+        $( '#password' ).val('').focus();
+    });
+
+    $( '#password' ).on( 'keypress', function( e ) {
+        $('#rtloginform .form-item' ).removeClass( 'form-item-err' );
+        $('#rtloginform .form-item .t' ).hide();
+    });
+
+    $( '#rtloginform' ).on( 'submit', function(e) {
+        e.preventDefault();
+        var frm = this.name,
+            that = this;
+        var validator = FormValidator.checkAll( frm, [{
+                name: 'password',
+                display :'<%:密码%>',
+                rules: 'required'
+            }] );
+
+        if ( validator ) {
+            $( '#btnRtSubmit' ).trigger( 'wait' );
+            var pwd = $( '#password' ).val();
+            var nonce = Encrypt.init();
+            var oldPwd = Encrypt.oldPwd( pwd );
+            var param = {
+                username: 'admin',
+                password: oldPwd,
+                logtype: 2,
+                nonce: nonce
+            };
+            var url = '<%=luci.dispatcher.build_url("api", "xqsystem", "login")%>';
+            $.post( url, param, function( rsp ) {
+                var rsp = $.parseJSON( rsp );
+                if ( rsp.code == 0 ) {
+                    window.location.href = rsp.url;
+                } else if ( rsp.code == 403 ) {
+                    window.location.reload();
+                } else {
+                    $( '.form-item', that ).addClass( 'form-item-err' );
+                    $( '.form-item-err .t', that ).html( '<%:密码错误，请重试或者尝试"admin"登录%>' ).show();
+                    $( '.form-item', that ).addClass( 'shake animated' ).one( 'webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(){
+                        $( this ).removeClass('shake animated');
+                    } );
+
+                    setTimeout( function(){
+                        $( '#btnRtSubmit' ).trigger( 'done' );
+                    }, 100 );
+                }
+            });
+        }
+    });
+
+    $.placeholder();
+});
+</script>

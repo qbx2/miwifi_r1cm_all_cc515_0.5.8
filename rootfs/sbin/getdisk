@@ -1,0 +1,153 @@
+#!/bin/sh
+
+sys_shared() {
+	num=`uci get disk.setting.total`
+	ext=`uci get disk.setting.status`
+	
+	# tmp disable status check,leave it for future use
+	#if [ "$ext" = "0" ]; then
+	#	return 0
+	#fi
+
+	ind=`cat /proc/mounts | grep sd | awk '{print $1","$2}'`
+
+	for i in $ind
+	do
+		nd=`echo $i | cut -d "," -f 1`
+		mx=`echo $i | cut -d "," -f 2`
+		if [ -b $nd ]; then
+			idx=1
+			got=0
+			while [ $idx -le $num ]
+			do
+				ld=`uci get disk.p$idx.node`
+				if [ "$ld" = "$nd" ]; then
+					got=1
+
+					en=`uci get disk.p$idx.shared`
+					if [ "$en" = "1" ]; then
+						lst="$lst $i"
+					fi
+				fi
+
+				idx=$(( $idx + 1 ))
+			done
+
+			if [ "$got" = "0" ]; then
+				lst="$lst $i"
+			fi
+		fi
+	done
+
+	#xargs will remove the leading space
+	echo "$lst" | xargs
+}
+
+sys_noded() {
+	num=`uci get disk.setting.total`
+	idx=1
+
+	while [ $idx -le $num ]
+	do
+		na=`uci get disk.p$idx.name`
+		if [ "$na" = "$1" ]; then
+			nd=`uci get disk.p$idx.node`
+			echo "$nd"
+			break
+		fi
+
+		idx=$(( $idx + 1 ))
+	done
+}
+
+sys_typed() {
+	num=`uci get disk.setting.total`
+	idx=1
+
+	while [ $idx -le $num ]
+	do
+		na=`uci get disk.p$idx.name`
+		if [ "$na" = "$1" ]; then
+			nd=`uci get disk.p$idx.type`
+			echo "$nd"
+			break
+		fi
+
+		idx=$(( $idx + 1 ))
+	done
+}
+
+sys_parted() {
+	num=`uci get disk.setting.total`
+	idx=1
+
+	while [ $idx -le $num ]
+	do
+		na=`uci get disk.p$idx.name`
+		if [ "$na" = "$1" ]; then
+			echo "p$idx"
+			break
+		fi
+
+		idx=$(( $idx + 1 ))
+	done
+}
+
+probe_fs() {
+	[ -b $1 ] && {
+		type=`blkid -s TYPE $1 | cut -d "\"" -f2`
+		[ -z $type ] || echo $type
+	}
+}
+
+
+#$1 = base device, e,g, /dev/sda
+probe_gpt() {
+	flag=`dd bs=1 count=1 skip=450 if=$1 2>/dev/null | hexdump  -e '16/1 "%02x" "\n"'`
+	if [ $flag = "ee" ]; then
+		echo "GPT"
+	else
+		echo "MBR"
+	fi
+}
+
+
+#$1 = base device, e,g, /dev/sda
+#$2 = part id
+probe_guid() {
+	let i=128*$2+896
+	dd bs=1 count=16 skip=$i if=$1 2>/dev/null | hexdump -e '16/1 "%02x" "\n"'
+}
+
+
+case $1 in
+	"mnt")
+		sys_shared
+		;;
+	"node")
+		[ -z "$2" ] && exit 0
+		sys_noded $2
+		;;
+	"type")
+		[ -z "$2" ] && exit 0
+		sys_typed $2
+		;;
+	"part")
+		[ -z "$2" ] && exit 0
+		sys_parted $2
+		;;
+	"fs")
+		[ -z "$2" ] && exit 0
+		probe_fs $2
+		;;
+	"guid")
+		[ -z "$2" ] && exit 0
+		probe_guid $2 $3
+		;;
+	"gpt")
+		[ -z "$2" ] && exit 0
+		probe_gpt $2
+		;;
+	*)
+		;;
+esac

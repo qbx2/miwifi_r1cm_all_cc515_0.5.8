@@ -1,0 +1,420 @@
+#!/bin/sh
+#
+#TODO: read ip stat from iptaccount -C -s -l landownloadtraffic && iptaccount -C -s -l lanuploadtraffic 
+#
+export LANG=C
+#
+export DEVNAMELIST='/etc/app/device_names'
+#
+export TMPNAMELIST="/tmp/$(echo ${DEVNAMELIST}|tr '/' '_')"
+#
+#let idle=60*60*24*7*2 = 1209600
+#
+#two week
+#
+#EXPIRETS=1209600
+#
+#max idle ts, 10 seconds
+#
+MAXIDLETS=10
+#
+#run in daemon
+#
+. /lib/lib.scripthelper.sh
+#
+#set array dir, work with log watcher
+export SCRIPTARRAYDIR='/tmp/arrays/iptraffic/'
+#
+export ONEMACINFOTXT=''
+export NOWTS=$(date -u +%s)
+#
+evals(){
+    ret=`echo "eval \"$@\"" | /bin/sh  >/dev/null 2>&1; echo $?`
+    if [ $ret -eq 0 ] ; then
+        eval "$@"
+    fi
+}
+daemonstop(){
+	savetrafficdata
+	if [ $? -ne 0 ]
+		then
+		dlog "ERROR: save traffic data failed."
+	fi
+	iptallremove
+	return 0
+}
+#
+iptallremove(){
+	clscnt=0
+	while [ $clscnt -le 10 ]
+	do
+		iptables -L -t mangle -n -v | grep -q 'LANIPTRAFFICACCOUNT'
+		test $? -ne 0 && break
+
+		iptables -D POSTROUTING -t mangle -o br-lan -m comment --comment LANIPTRAFFICACCOUNT -j landownloadtraffic 2>/dev/null
+		iptables -D PREROUTING -t mangle -i br-lan -m comment --comment LANIPTRAFFICACCOUNT -j lanuploadtraffic 2>/dev/null
+
+		iptables -F landownloadtraffic -t mangle 2>/dev/null
+		iptables -F lanuploadtraffic -t mangle 2>/dev/null
+
+		iptables -X landownloadtraffic -t mangle 2>/dev/null
+		iptables -X lanuploadtraffic -t mangle 2>/dev/null
+
+		let clscnt=$clscnt+1
+	done
+	return 0
+}
+iptinitial(){
+	#
+	local mute
+	#
+	mute="$1"
+	#
+	iptnewchain "iptables -N landownloadtraffic -t mangle"
+	iptnewchain "iptables -N lanuploadtraffic -t mangle"
+	#
+	iptcheckfile="/tmp/rules.iptraff-check.$$.log"
+	#make sure iptraff counter is at the first palce
+	iptables -L POSTROUTING -t mangle --line-numbers -n > ${iptcheckfile} 2>&1
+	cat ${iptcheckfile} 2>/dev/null | grep -q "LANIPTRAFFICACCOUNT"
+	if [ $? -ne 0 ]
+		then
+		logexec "iptables -I POSTROUTING -t mangle -o br-lan -m comment --comment LANIPTRAFFICACCOUNT -j landownloadtraffic"
+		if [ $? -ne 0 ]
+			then
+			dlog "WARNING: initial landownloadtraffic failed."
+			return 1
+		fi
+		test -"$mute" != 'mute' && dlog "INFO: initial landownloadtraffic ok."
+	else
+		cat ${iptcheckfile} 2>/dev/null | grep "LANIPTRAFFICACCOUNT" | grep -q '^1 '
+		if [ $? -ne 0 ]; then
+			iptremoverule "POSTROUTING -t mangle -o br-lan -m comment --comment LANIPTRAFFICACCOUNT -j landownloadtraffic"
+			logexec "iptables -I POSTROUTING -t mangle -o br-lan -m comment --comment LANIPTRAFFICACCOUNT -j landownloadtraffic"
+			if [ $? -ne 0 ]
+				then
+				dlog "ERROR: replace landownloadtraffic failed."
+				return 1
+			fi
+			test -"$mute" != 'mute' && dlog "INFO: replace landownloadtraffic ok."
+		fi
+	fi
+	iptables -L PREROUTING -t mangle --line-numbers -n > ${iptcheckfile} 2>&1
+	cat ${iptcheckfile} 2>/dev/null | grep -q "LANIPTRAFFICACCOUNT"
+	if [ $? -ne 0 ]
+		then
+		logexec "iptables -I PREROUTING -t mangle -i br-lan -m comment --comment LANIPTRAFFICACCOUNT -j lanuploadtraffic"
+		if [ $? -ne 0 ]
+			then
+			dlog "WARNING: initial lanuploadtraffic failed."
+			return 1
+		fi
+		test -"$mute" != 'mute' && dlog "INFO: initial lanuploadtraffic ok."
+	else
+		cat ${iptcheckfile} 2>/dev/null | grep "LANIPTRAFFICACCOUNT" | grep -q '^1 '
+		if [ $? -ne 0 ]; then
+			iptremoverule "PREROUTING -t mangle -i br-lan -m comment --comment LANIPTRAFFICACCOUNT -j lanuploadtraffic"
+			logexec "iptables -I PREROUTING -t mangle -i br-lan -m comment --comment LANIPTRAFFICACCOUNT -j lanuploadtraffic"
+			if [ $? -ne 0 ]
+				then
+				dlog "ERROR: replace lanuploadtraffic failed."
+				return 1
+			fi
+			test -"$mute" != 'mute' && dlog "INFO: replace lanuploadtraffic ok."
+		fi
+	fi
+	#
+	lanipmask=`ip route list dev br-lan | head -n1|pipegetspacepos 1`
+	iptables -L landownloadtraffic -t mangle -n > ${iptcheckfile} 2>&1
+	cat ${iptcheckfile} 2>/dev/null | grep -q "ACCOUNT addr $lanipmask tname landownloadtraffic"
+	if [ $? -ne 0 ]
+		then
+		iptexec "iptables -F landownloadtraffic -t mangle"
+		iptexec "iptables -I landownloadtraffic -t mangle -m comment --comment LANIPTRAFFICACCOUNT -j ACCOUNT --addr $lanipmask --tname landownloadtraffic"
+		if [ $? -ne 0 ]
+			then
+			dlog "ERROR: ACCOUNT addr $lanipmask tname landownloadtraffic initial failed."
+			return 1
+		else
+			test -"$mute" != 'mute' && dlog "INFO: ACCOUNT addr $lanipmask tname landownloadtraffic initialed."
+		fi
+	fi
+	iptables -L lanuploadtraffic -t mangle -n > ${iptcheckfile} 2>&1
+	cat ${iptcheckfile} 2>/dev/null | grep -q "ACCOUNT addr $lanipmask tname lanuploadtraffic"
+	if [ $? -ne 0 ]
+		then
+		iptexec "iptables -F lanuploadtraffic -t mangle"
+		iptexec "iptables -I lanuploadtraffic -t mangle -m comment --comment LANIPTRAFFICACCOUNT -j ACCOUNT --addr $lanipmask --tname lanuploadtraffic"
+		if [ $? -ne 0 ]
+			then
+			dlog "ERROR: ACCOUNT addr $lanipmask tname lanuploadtraffic initial failed."
+			return 1
+		else
+			test -"$mute" != 'mute' && dlog "INFO: ACCOUNT addr $lanipmask tname lanuploadtraffic initialed."
+		fi
+	fi
+	#
+	return 0
+}
+#
+updatedhcpname(){
+	local devinfo devinfo DEVNAME MAC
+	#dlog "TIMING: start dhcp name map update"
+	leapfile=$(cat /var/etc/dnsmasq.conf 2>/dev/null| grep 'dhcp-leasefile=' | awk -F'=' '{print $2}')
+	if [ -z "$leapfile" ]
+		then
+		#slog leapfile dlog "ERROR: configure of dhcp-leasefile no found: /var/etc/dnsmasq.conf"
+		return 1
+	else
+		slog leapfile release
+	fi
+	#create array map devicenames[mac]=nickname
+	#arrdelall devicenames
+	#1376755945 b8:70:f4:27:0c:1b 192.168.31.137 rhinofly-Mini-Y570 *
+	while read devinfo
+	do
+		#1376755945 b8:70:f4:27:0c:1b 192.168.31.137 rhinofly-Mini-Y570 *
+		MAC=$(getspacepos 2 ${devinfo} | tr '[a-z]' '[A-Z]')
+		#dlog "DEBUG: got mac $MAC from ${devinfo}"
+		test -z "$MAC" && continue
+		arrcheck devicenames $MAC
+		if [ $? -eq 0 ]
+			then
+			#already have a nickname
+			continue
+		fi
+		DEVNAME=$(getspacepos 4 ${devinfo} )
+		if [ -z "$DEVNAME" -o "$DEVNAME" == '*' ]
+			then
+			DEVNAME="unknow-$MAC"
+		fi
+		arrfastset devicenames $MAC $DEVNAME
+		#dlog "DEBUG: updatedhcpname arrfastset devicenames $MAC $DEVNAME // $devinfo"
+		#dlog "DEBUG: updatedhcpname arrfastget devicenames $MAC => $(arrfastget devicenames $MAC)"
+	done < $leapfile
+	#dlog "TIMING: end dhcp name map update"
+}
+#
+updatedevicename(){
+	local devinfo devinfo DEVNAME MAC
+	#dlog "TIMING: start device name map update"
+	cat $DEVNAMELIST | grep -v '^#' | sed -e '/^$/d' | tr ' ' '-' > ${TMPNAMELIST} 2>/dev/null
+	#create array map devicenames[mac]=nickname
+	#arrdelall devicenames
+	while read devinfo
+	do
+		#AC:F7:F3:13:B6:3B::android-yin-mi2
+		MAC=${devinfo:0:17}
+		test -z "$MAC" && continue
+		MAC=$(echo $MAC| tr '[a-z]' '[A-Z]')
+		DEVNAME=${devinfo:19:65535}
+		if [ -z "$DEVNAME" ]
+			then
+			DEVNAME="unknow-$MAC"
+		fi
+		arrfastset devicenames $MAC $DEVNAME
+		#dlog "DEBUG: updatedevicename arrfastset devicenames $MAC $DEVNAME // $devinfo"
+		#dlog "DEBUG: updatedevicename arrfastget devicenames $MAC => $(arrfastget devicenames $MAC)"
+	done < ${TMPNAMELIST}
+	updatedhcpname
+	#dlog "TIMING: end device name map update"
+}
+#
+setonemacinfo(){
+	ONEMACINFOTXT="MAC=$MAC;IP=$IP;ONLINETS=$ONLINETS;ACTIVETS=$ACTIVETS;UPLOAD1=$UPLOAD1;UPLOAD2=$UPLOAD2;UPSPEED=$UPSPEED;DOWNLOAD1=$DOWNLOAD1;DOWNLOAD2=$DOWNLOAD2;DOWNSPEED=$DOWNSPEED;ONELINE=$ONELINE;IDLE=$IDLE;DEVNAME=$DEVNAME;INITAIL=$INITAIL;MAXUPLOADSPEED=$MAXUPLOADSPEED;MAXDOWNLOADSPEED=$MAXDOWNLOADSPEED"
+}
+initmacinfo(){
+	NOWTS=$(date -u +%s)
+	test -z "$MAC" && MAC='unset-mac'
+	test -z "$IP" && IP='0.0.0.0'
+	test -z "$DEVNAME" && DEVNAME='unset-name'
+	#
+	updatemacinfo
+}
+#
+updatemacinfo(){
+	NOWTS=$(date -u +%s)
+	#test -z "$MAC" && MAC='unset-mac'
+	#test -z "$IP" && IP='0.0.0.0'
+	#test -z "$DEVNAME" && DEVNAME=''
+	test -z "$ONLINETS" && ONLINETS=$NOWTS
+	test -z "$ACTIVETS" && ACTIVETS=$NOWTS
+	test -z "$UPLOAD1" && UPLOAD1=0
+	test -z "$UPLOAD2" && UPLOAD2=0
+	test -z "$UPSPEED" && UPSPEED=0
+	test -z "$DOWNLOAD1" && DOWNLOAD1=0
+	test -z "$DOWNLOAD2" && DOWNLOAD2=0
+	test -z "$DOWNSPEED" && DOWNSPEED=0
+	test -z "$ONELINE" && ONELINE=0
+	test -z "$IDLE" && IDLE=0
+	test -z "$INITAIL" && INITAIL=$NOWTS
+	test -z "$MAXUPLOADSPEED" && MAXUPLOADSPEED=0
+	test -z "$MAXDOWNLOADSPEED" && MAXDOWNLOADSPEED=0
+	#
+	setonemacinfo
+}
+#
+loadmacinfo(){
+	local onemac macline
+	onemac="$1"
+	test -z "$onemac" && dlog "ERROR: loadmacinfo without arg."&& initmacinfo && return 1
+	macline=$(arrfastget mactrafficdata $onemac)
+	if [ -n "$macline" ]
+		then
+		evals "$macline"
+	else
+		initmacinfo
+	fi
+	updatemacinfo
+	return 0
+}
+exportmacinfo(){
+	#
+	#export to /tmp/activate.arp.list, /tmp/activate.arp.list.ui
+	#
+	maclist=$(arrkeylist mactrafficdata)
+	exportts=$(date -u +%s)
+	cat /dev/null > /tmp/activate.arp.list.${exportts} && cat /dev/null > /tmp/activate.arp.list.ui.${exportts}
+	if [ $? -ne 0 ]
+		then
+		dlog "ERROR: create failed: /tmp/activate.arp.list.${exportts} /tmp/activate.arp.list.ui.${exportts}"
+		return 1
+	fi
+	expcount=0
+	for MAC in $maclist
+	do
+		macfile=$(arrfastgetfile mactrafficdata $MAC)
+		if [ -z "$macfile" ]
+			then
+			dlog "ERROR: load mac traffic info failed: arrfastgetfile mactrafficdata $MAC"
+			continue
+		fi
+		if [ ! -s "$macfile" ]
+			then
+			dlog "ERROR: load mac traffic info failed, empty file: $macfile"
+			continue
+		fi
+		cat "$macfile" >> /tmp/activate.arp.list.${exportts}
+		if [ $? -ne 0 ]
+		then
+			dlog "ERROR: write $MAC failed: /tmp/activate.arp.list.${exportts}"
+			return 1
+		fi
+		cat "$macfile" | tr ';' ' ' >> /tmp/activate.arp.list.ui.${exportts}
+		if [ $? -ne 0 ]
+		then
+			dlog "ERROR: write $MAC failed: /tmp/activate.arp.list.ui.${exportts}"
+			return 1
+		fi
+		let expcount=$expcount+1
+	done
+	cat /tmp/activate.arp.list.${exportts} > /tmp/activate.arp.list
+	cat /tmp/activate.arp.list.ui.${exportts} > /tmp/activate.arp.list.ui
+	rm -f /tmp/activate.arp.list.${exportts}
+	rm -f /tmp/activate.arp.list.ui.${exportts}
+	#dlog "DEBUG: $expcount mac info exported."
+	return 0
+}
+#
+loadtrafficdata(){
+	#oneline one record
+	mkdir -p /data/sysapi/iptraffic/
+	#
+	touch /data/sysapi/iptraffic/activate.arp.list
+	maccount=0
+	#arrdelall mactrafficdata
+	while read macline
+	do
+		NOWTS=$(date -u +%s)
+		initmacinfo
+		evals "$macline"
+		if [ -z "$MAC" ]
+			then
+			dlog "WARNING: load traffic, skipped for no mac: $macline"
+			continue
+		fi
+		if [ -z "$IP" ]
+			then
+			dlog "WARNING: load traffic, no ip for ${MAC}: $macline"
+			continue
+		fi
+		let maccount=$maccount+1
+		arrcheck mactrafficdata $MAC
+		if [ $? -eq 0 ]
+			then
+			#already exist
+			continue
+		fi
+		test -z "$DEVNAME" && DEVNAME="unknow-$MAC"
+		UPLOAD1="$UPLOAD2"
+		DOWNLOAD1="$DOWNLOAD2"
+		#
+		updatemacinfo
+		#
+		arrfastset mactrafficdata $MAC $ONEMACINFOTXT
+		#dlog "DEBUG: arrfastset mactrafficdata $macline"
+		#dlog "DEBUG: $MAC => $ONEMACINFOTXT"
+		#dlog "DEBUG: arrfastget mactrafficdata $MAC: $(arrfastget mactrafficdata $MAC)"
+		#if [ "$macline" != "$ONEMACINFOTXT" ]
+		#	then
+		#	dlog "INFO: $MAC updated."
+		#fi
+	done < /data/sysapi/iptraffic/activate.arp.list
+	dlog "INFO: $maccount mac traffic data loaded."
+	#arrdump mactrafficdata
+	#
+	#exportmacinfo
+	#
+}
+savetrafficdata(){
+	exportmacinfo
+	if [ $? -ne 0 ]
+		then
+		dlog "ERROR: can not save traffic data for export failed."
+		return 1
+	fi
+	mkdir -p /data/sysapi/iptraffic/ && cat /tmp/activate.arp.list > /data/sysapi/iptraffic/activate.arp.list
+	test $? -ne 0 && dlog "ERROR: flush iptraffic data failed: cat /tmp/activate.arp.list > /data/sysapi/iptraffic/activate.arp.list" && return 1
+	return 0
+}
+#
+#if [ ! -x /usr/bin/arp ]
+#	then
+#	conlog "ERROR: /usr/bin/arp no found, please install: opkg update && opkg install net-tools-arp"
+#	exit 1
+#fi
+#
+#procdaemon mute
+#
+
+
+checkproclock 30
+if [ $? -ne 0 ]
+        then
+        dlog "INFO: wait 30 seconds, but already running, pid $(getlockedprocpid))"
+        exit 0
+fi
+#
+setproclock
+#
+ctlop="start"
+if [ "$1" == 'start' -o "$1" == 'stop' ]
+then
+        ctlop="$1"
+fi
+if [ "$1" == 'boot' ]
+then
+        ctlop="start"
+fi
+
+if [ "$ctlop" == 'stop' ]
+then
+    dlog "$0 stop iptallremove"
+    iptallremove
+    exit 0
+else
+    dlog "$0 start iptinitial"
+	iptinitial mute
+    exit 0
+fi
+

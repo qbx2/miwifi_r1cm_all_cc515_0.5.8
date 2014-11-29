@@ -1,0 +1,39 @@
+#!/bin/sh /etc/rc.common
+
+#START=70
+#STOP=99
+
+#export command line for /usr/sbin/supervisord
+export PROCLINE="/usr/bin/resetButton"
+#
+export PROCFLAG="/usr/bin/resetButton"
+
+export EXTRA_HELP="     status  Status the service"
+export EXTRA_COMMANDS="status"
+
+start() {
+        /usr/sbin/supervisord start
+        return $?
+}
+
+restart() {
+        stop
+        sleep 1
+        start
+        return $?
+}
+
+shutdown() {
+        stop
+        return $?
+}
+
+stop() {
+        /usr/sbin/supervisord stop
+        return $?
+}
+status() {
+        /usr/sbin/supervisord status
+        return $?
+}
+#

@@ -1,0 +1,38 @@
+#!/bin/sh
+
+blueled_fliker(){
+	#turn off all the leds
+	gpio 1 1
+	gpio 2 1
+	gpio 3 1
+
+	#blue led flicker
+	while true
+	do
+		gpio 3 0
+		usleep 1200000
+
+		gpio 3 1
+		usleep 600000
+	done
+}
+
+#check pid exist
+pid_file="/tmp/pid_updateledfliker"
+if [ -f $pid_file ]; then
+        exist_pid=`cat $pid_file`
+        if [ -n $exist_pid ]; then
+                kill -0 $exist_pid 2>/dev/null
+                if [ $? -eq 0 ]; then
+                        exit 1
+                else
+                        echo $$ > $pid_file
+                fi
+        else
+                echo $$ > $pid_file
+        fi
+else
+        echo $$ > $pid_file
+fi
+
+blueled_fliker

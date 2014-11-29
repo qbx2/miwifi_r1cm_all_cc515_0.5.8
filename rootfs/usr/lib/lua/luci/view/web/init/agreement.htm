@@ -1,0 +1,36 @@
+<%
+    local ver = require("xiaoqiang.XQVersion").webVersion
+    local uci = require "luci.model.uci"
+    local cursor = uci.cursor()
+    local lang = cursor.get("luci.main.lang")
+    if lang=="auto" then
+        lang = "zh_cn"
+    end
+%>
+<%include("web/inc/head")%>
+    <title>小米路由器</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link href="<%=resource%>/web/css/bc.css?v=<%=ver%>" rel="stylesheet">
+    <link href="<%=resource%>/web/css/agreement.css?v=<%=ver%>" rel="stylesheet">
+</head>
+<body>
+<div id="doc">
+    <div id="hd">
+        <div class="inner">
+            <div class="mod-head clearfix">
+                <h1 id="logo"><a href="<%=homeUrl%>"><img src="<%=resource%>/web/img/logo.png" alt="<%:小米路由器%>"></a></h1>
+            </div>
+        </div>
+    </div>
+    <div id="bd">
+        <div class="mod-agreenment">
+            <h2><%:小米路由器系列产品用户许可使用协议%></h2>
+            <%include("web/inc/agreement")%>
+        </div>
+    </div>
+    <%include("web/inc/footermini")%>
+</div>
+</body>
+</html>

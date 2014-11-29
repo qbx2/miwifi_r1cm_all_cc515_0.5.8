@@ -1,0 +1,607 @@
+<%
+--[[
+    Info    路由器Wi-Fi设置
+]]--
+local ver = require("xiaoqiang.XQVersion").webVersion
+local wifiUtil = require("xiaoqiang.util.XQWifiUtil")
+local LuciJson = require("luci.json")
+local fun = require"xiaoqiang.common.XQFunction"
+local wifi_status = wifiUtil.getWifiStatus(1).up
+local wifi5_status = wifiUtil.getWifiStatus(2).up
+
+local remote_addr = luci.http.getenv("REMOTE_ADDR")
+local mac = luci.sys.net.ip4mac(remote_addr)
+local lanType = wifiUtil.getDeviceWifiIndex(mac)
+lanType = tonumber(lanType);
+
+local wifi_pddk = LuciJson.encode(wifiUtil.getDefaultWifiChannels(1))
+local wifi5_pddk = LuciJson.encode(wifiUtil.getDefaultWifiChannels(2))
+
+local wifiTxpwr = wifiUtil.getWifiTxpwr(1)
+
+function encode4HtmlValue(str)
+    str = string.gsub( str, '<', '&lt;')
+    str = string.gsub( str, '>', '&gt;')
+    str = string.gsub( str, '"', '&quot;')
+    str = string.gsub( str, "'", '&#039;')
+    str = string.gsub( str, '&', '&amp;')
+    return str
+end
+
+%>
+<%include("web/inc/head")%>
+<title><%:小米路由器%></title>
+<meta name="viewport" content="width=1200">
+<link href="<%=resource%>/web/css/bc.css?v=<%=ver%>" rel="stylesheet">
+<link href="<%=resource%>/web/css/wifi.css?v=<%=ver%>" rel="stylesheet">
+</head>
+<body>
+<div id="doc">
+    <%include("web/inc/header")%>
+    <div id="bd">
+        <div class="mod-set mod-wifi">
+            <div class="hd">
+                <h3>无线网络</h3>
+            </div>
+            <form class="form form-horizontal" id="wifiset" name="wifiset" method="post" action="<%=luci.dispatcher.build_url("api", "xqnetwork", "set_all_wifi")%>" autocomplete="off">
+                <%for k,v in pairs(tplData) do%>
+                    <!-- old val start -->
+                    <input type="hidden" name="old_on<%=k%>" value="<%=v["status"]%>">
+                    <input type="hidden" name="old_ssid<%=k%>" value="<%=v["ssid"]%>">
+                    <input type="hidden" name="old_hidden<%=k%>" value="<%=v["hidden"]%>">
+                    <input type="hidden" name="old_encryption<%=k%>" value="<%=v["encryption"]%>">
+                    <%if(v["encryption"]=="none") then%>
+                        <input type="hidden" name="old_pwd<%=k%>" value="">
+                    <%else%>
+                        <input type="hidden" name="old_pwd<%=k%>" value="<%=encode4HtmlValue(v["password"])%>">
+                    <%end%>
+                    <input type="hidden" name="old_channel<%=k%>" value="<%=v["channel"]%>">
+                    <input type="hidden" name="old_bandwidth<%=k%>" value="<%=v["bandwidth"]%>">
+                    <!-- old val end -->
+                    <div class="group" id="<%if(k == 1) then%>wifi24<%else%>wifi50<%end%>">
+                        <input type="hidden" name="on<%=k%>" value="<%=v["status"]%>">
+                        <div class="item <%if(k == 1) then%>first<%end%>">
+                            <span class="k"><%if(k == 1) then%>2.4<%else%>5<%end%>G Wi-Fi</span>
+                            <span class="v"><a href="#" data-order="<%=k%>" class="btn-switch <%if(v["status"] == "0") then%>btn-switch-off<%else%>btn-switch-on<%end%> btn-wifi-st"></a></span>
+                        </div>
+                        <div class="group-set clearfix" <%if(v["status"] == "0") then%> style="display:none;"<%end%>>
+                            <%if(v["encryption"]=="none") then%>
+                                <p class="alert"><%:无线网络未设置密码，有被他人盗用的风险，请设置密码。%></p>
+                            <%end%>
+                            <div class="form-item">
+                                <label class="k"><%:名称%></label>
+                                <span class="v"><input type="text" name="ssid<%=k%>" value="<%=v["ssid"]%>" class="ipt-text" autocomplete="off" /></span>
+                                <em class="t"></em>
+                            </div>
+                            <div class="form-item">
+                                <label for="hidessid<%=k%>"> <input type="checkbox" id="hidessid<%=k%>" name="hidden<%=k%>" value="1" <%if v["hidden"] == "1" then%>checked="checked"<%end%>> <span>隐藏网络不被发现</span></label>
+                            </div>
+                            <div class="form-item-select">
+                                <label class="k"><%:加密方式%></label>
+                                <span class="v">
+                                    <select name="encryption<%=k%>" class="beautify encryption" style="width:210px;">
+                                        <option value="psk2"<%if(v["encryption"] == "psk2") then%> selected="selected"<%end%>><%:强加密(WPA2个人版)%></option>
+                                        <option value="mixed-psk"<%if(v["encryption"] == "mixed-psk") then%> selected="selected"<%end%>><%:混合加密(WPA/WPA2个人版)%></option>
+                                        <option value="none"<%if(v["encryption"] == "none") then%> selected="selected"<%end%>><%:无加密(允许所有人连接)%></option>
+                                    </select>
+                                </span>
+                                <em class="t"></em>
+                            </div>
+                            <div class="form-item" id="item-pwd-<%=k%>" <%if(v["encryption"] == "none") then%> style="display:none;"<%end%>>
+                                <label class="k"><%:密码%></label>
+                                <span class="v">
+                                    <%if(v["encryption"] == "none") then%>
+                                    <input type="password" data-type="password" name="pwd<%=k%>" value="" class="ipt-text" autocomplete="off" />
+                                    <%else%>
+                                    <input type="password" data-type="password" name="pwd<%=k%>" value="<%=encode4HtmlValue(v["password"])%>" class="ipt-text" autocomplete="off" />
+                                    <%end%>
+                                </span>
+                                <em class="t"></em>
+                            </div>
+                            <div class="form-item-select">
+                                <label class="k"><%:无线信道%></label>
+                                <span class="v">
+                                <select name="channel<%=k%>" data-type="<%=k%>" class="beautify channel" style="width:210px;">
+                                <%if(k == 1) then%>
+                                    <%for k2,v2 in pairs({0,1,2,3,4,5,6,7,8,9,10,11,12,13}) do%>
+                                        <option value="<%=v2%>" <%if(tonumber(v["channel"])==v2) then%>selected="selected"<%end%>><%if(v2==0) then%><%:自动%><%if v["channelInfo"]["channel"] ~= "0" then%>(<%=v["channelInfo"]["channel"]%>)<%end%><%else%><%=v2%><%end%></option>
+                                    <%end%>
+                                <%else%>
+                                    <%for k2,v2 in pairs({0,36,40,44,48,52,56,60,64,149,153,157,161,165}) do%>
+                                        <option value="<%=v2%>" <%if(tonumber(v["channel"])==v2) then%>selected="selected"<%end%>><%if(v2==0) then%><%:自动%><%if v["channelInfo"]["channel"] ~= "0" then%>(<%=v["channelInfo"]["channel"]%>)<%end%><%else%><%=v2%><%end%></option>
+                                    <%end%>
+                                <%end%>
+                                </select>
+                                </span>
+                                <em class="t"></em>
+                            </div>
+                            <div class="form-item-select" id="itemBandwidth<%=k%>" <%if(table.getn(v["channelInfo"]["bandList"]) == 0) and v["channel"] == "0" then%>style="display:none;"<%end%>>
+                                <label class="k"><%:频段带宽%></label>
+                                <span class="v">
+                                    <%if(v["bandwidth"] == "0") then%>
+                                    <select name="bandwidth<%=k%>" class="beautify" id="bandwidth<%=k%>" style="width:210px;">
+                                        <option value="0"><%:自动%></option>
+                                    </select>
+                                    <%else%>
+                                    <select name="bandwidth<%=k%>" class="beautify" id="bandwidth<%=k%>" style="width:210px;">
+                                        <%for k2, v2 in pairs(v["channelInfo"]["bandList"]) do%>
+                                            <option value="<%=v2%>" <%if(v2 == v["bandwidth"]) then%>selected="selected"<%end%>><%=v2%>M</option>
+                                        <%end%>
+                                    </select>
+                                    <%end%>
+
+                                </span>
+                                <em class="t"></em>
+                            </div>
+                        </div>
+                    </div>
+                <%end%>
+                <div class="form-contral">
+                    <button type="submit" class="btn btn-primary btn-block" id="btnSubmit"><span><%:保存%></span></button>
+                </div>
+            </form>
+        </div>
+        <div class="mod-wifi-txpwr">
+            <div class="hd">
+                <h3><%:信号强度%></h3>
+            </div>
+            <div class="bd">
+                <form name="wifiSetTxpwr" id="wifiSetTxpwr" class="form form-horizontal" autocomplete="off">
+                    <div class="form-item-select">
+                        <label class="k"><%:信号强度%></label>
+                        <span class="v">
+                        <select name="txpwr" id="txpwr" class="beautify" style="width:210px;">
+                            <option value="max" <%if(wifiTxpwr == "max") then%>selected="selected"<%end%>><%:穿墙%></option>
+                            <option value="mid" <%if(wifiTxpwr == "mid") then%>selected="selected"<%end%>><%:标准%></option>
+                            <option value="min" <%if(wifiTxpwr == "min") then%>selected="selected"<%end%>><%:节能%></option>
+                        </select>
+                        </span>
+                        <em class="t"></em>
+                    </div>
+                    <div class="form-contral">
+                        <button type="submit" class="btn btn-primary btn-block" id="btnSubmit"><span><%:保存%></span></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <%include("web/inc/footer")%>
+
+</div>
+<%include("web/inc/g.js")%>
+<script>
+(function(){
+    var global = {};
+
+    $.sub( 'wifi:init', function(evt, data){
+        global.wifi = {
+            isWifiConn: <%=lanType%>,
+            pddk: {
+                '1': '<%=wifi_pddk%>',
+                '2': '<%=wifi5_pddk%>'
+            }
+        };
+        global.oldConfig = (function( rsp ){
+            var tmp = {};
+            for( var key in rsp ){
+                // console.log(rsp[key], rsp[key].name, rsp[key].value);
+                if ( rsp[key] && rsp[key]['name'] ) {
+                    if (/old_\w+\d/.test( rsp[key]['name'] )) {
+                        tmp[rsp[key]['name'].replace( 'old_', '' )] = rsp[key]['value'];
+                    }
+                }
+            }
+            // console.log( 'wifiinfi', tmp.pwd2 );
+            tmp.pwd1 = StringH.decode4Html( tmp.pwd1 );
+            tmp.pwd2 = StringH.decode4Html( tmp.pwd2 );
+            // console.log( 'wifiinfi', tmp.pwd2 );
+            return tmp;
+        })( $('#wifiset')[0].elements );
+    });
+
+    $.sub( 'wifi:wait', function( evt, data ){
+        $("#btnSubmit").attr("disabled",true).find('span').text('<%:处理中...%>');
+        $("input,select").attr("readonly",true);
+    } );
+    $.sub( 'wifi:done', function( evt, data ){
+        $("#btnSubmit").attr("disabled",false).find('span').text('<%:保存%>');
+        $("input,select").attr("readonly",false);
+    } );
+    $.sub( 'wifi:bindEvent', function( evt, data ){
+
+        $( 'body' ).delegate( '.btn-switch-on', 'click', function( e ){
+            e.preventDefault();
+            var device_order = $( this ).attr( 'data-order' );
+            $.pub( 'wifi:close', {device_order : parseInt( device_order, 10 )} );
+        } );
+
+        $( 'body' ).delegate( '.btn-switch-off', 'click', function( e ){
+            e.preventDefault();
+            var device_order = $( this ).attr( 'data-order' );
+            $.pub( 'wifi:open', {device_order : parseInt( device_order, 10 )} );
+        } );
+
+        $( '#wifiset' ).on( 'submit', function( e ){
+            e.preventDefault();
+            var formName = this.name;
+            var formAction = this.action;
+            var encryption1 = $( 'select[name=encryption1]' ).val();
+            var encryption2 = $( 'select[name=encryption2]' ).val();
+            var validatorConf = [];
+            for ( var i = 0; i < 2; i++ ) {
+                var id = i + 1;
+                var rulesSsid = {
+                    name: 'ssid' + id,
+                    display :'<%:WIFI名称%>',
+                    rules: 'required|max_length[31]|valid_ssid',
+                    msg: {
+                        'max_length': '<%:名字过长，请使用短一些的名字%>'
+                    }
+                },
+                rulesPwd = {
+                    name: 'pwd' + id,
+                    display :'<%:密码%>',
+                    rules: 'required|haschina|min_length[8]|max_length[63]',
+                    msg: {
+                        'max_length': '<%:密码过长，请使用短一些的密码%>'
+                    }
+                };
+                validatorConf.push( rulesSsid );
+                validatorConf.push( rulesPwd );
+            };
+            if ( encryption1 === 'none' ) {
+                validatorConf[1].rules = 'haschina|min_length[8]|max_length[63]';
+            }
+            if ( encryption2 === 'none' ) {
+                validatorConf[3].rules = 'haschina|min_length[8]|max_length[63]';
+            }
+            var validator = FormValidator.checkAll( formName, validatorConf );
+            var on1 = $( 'input[name=on1]' ).val(),
+                on2 = $( 'input[name=on2]' ).val();
+            if ( on1 === '0' && on2 === '0' ) {
+                validator = true;
+            } else {
+                if ( on1 === '0' ) {
+                    validator = FormValidator.checkAll( formName, [validatorConf[2], validatorConf[3]] );
+                }
+                if ( on2 === '0' ) {
+                    validator = FormValidator.checkAll( formName, [validatorConf[0], validatorConf[1]] );
+                }
+            }
+            if ( validator ) {
+                var isChanged = false;
+                var checkItems;
+                var _pwd1 =  $( 'input[name=pwd1]' ).val(),
+                    _pwd2 = $( 'input[name=pwd2]' ).val(),
+                    _ssid1 = $( 'input[name=ssid1]' ).val(),
+                    _ssid2 = $( 'input[name=ssid2]' ).val(),
+                    _encryption1 = $( 'select[name=encryption1]' ).val(),
+                    _encryption2 = $( 'select[name=encryption2]' ).val(),
+                    _channel1 = $( 'select[name=channel1]' ).val(),
+                    _channel2 = $( 'select[name=channel2]' ).val(),
+                    _bandwidth1 = $( 'select[name=bandwidth1]' ).val(),
+                    _bandwidth2 = $( 'select[name=bandwidth2]' ).val(),
+                    _hidden1 = $('#hidessid1').prop('checked') ? '1' : '0',
+                    _hidden2 = $('#hidessid2').prop('checked') ? '1' : '0';
+
+                var requestDate = {
+                    on1: on1,
+                    on2: on2,
+                    ssid1: $.trim( _ssid1 ),
+                    ssid2: $.trim( _ssid2 ),
+                    pwd1: StringH.decode4Html( _pwd1 ),
+                    pwd2: StringH.decode4Html( _pwd2 ),
+                    encryption1: _encryption1,
+                    encryption2: _encryption2,
+                    channel1: _channel1,
+                    channel2: _channel2,
+                    bandwidth1: _bandwidth1,
+                    bandwidth2: _bandwidth2,
+                    hidden1: _hidden1,
+                    hidden2: _hidden2
+                };
+
+                var checkChange = function( items ){
+                    var _isChanged = false;
+                    for ( var item in items ) {
+                        if ( global.oldConfig[item] !== items[item] ) {
+                            console.log( item, items[item], global.oldConfig[item] );
+                            _isChanged = true;
+                            break;
+                        }
+                    }
+                    return _isChanged;
+                };
+
+                console.log( requestDate );
+                // 配置未发生变更，提示并中断操作
+                if ( requestDate['on1'] == '0' && requestDate['on2'] == '0' ) {
+                    // 如果关闭无线只检查开关
+                    checkItems = ObjectH.dump( requestDate, ['on1','on2'] );
+                    isChanged = checkChange( checkItems );
+                } else {
+                    // 如果关闭某个无线只检查某个开关和未关闭一项，顺序按照依赖关系排列便于快速检查完毕
+                    if ( requestDate['on1'] == '1' ) {
+                        checkItems = ObjectH.dump( requestDate, ['on1', 'on2', 'hidden1', 'ssid1', 'encryption1', 'pwd1', 'channel1', 'bandwidth1'] );
+                        isChanged = checkChange( checkItems );
+                    }
+                    if ( !isChanged && requestDate['on2'] == '1' ) {
+                        checkItems = ObjectH.dump( requestDate, ['on1', 'on2', 'hidden2', 'ssid2', 'encryption2', 'pwd2', 'channel2', 'bandwidth2'] );
+                        isChanged = checkChange( checkItems );
+                    }
+                }
+                if ( !isChanged ) {
+                    $.alert( '<%:你什么都没改变，提交什么啊%>' );
+                    return;
+                }
+
+                // 关闭当前wifi提示，中断操作
+                if ( global.wifi.isWifiConn !== 0 ) {
+                    var closeSelf = false;
+                    if ( global.wifi.isWifiConn === 1 && requestDate.on1 === 0 ) {
+                        closeSelf = true;
+                    }
+                    if ( global.wifi.isWifiConn === 2 && requestDate.on2 === 0 ) {
+                        closeSelf = true;
+                    }
+                    if ( closeSelf ) {
+                        $.alert( '<%:当前连接 Wi-Fi 无法关闭，否则终端将与路由器失去连接，请在网线连接时设置%>').lock().time( 5000 );
+                        return;
+                    }
+                }
+
+                $.pub( 'wifi:confirm', {
+                    ok : function(){
+                        $.pub( 'wifi:wait' );
+                        $.pub( 'wifi:modify', {
+                                requestDate : requestDate,
+                                url : formAction
+                            } );
+                    },
+                    cancel : function(){
+                        //$.pub('wifi:done');
+                    }
+                } );
+            }
+        });
+
+        $( '.encryption' ).on( 'change', function( e ){
+            var val = $( this ).val(),
+                id = this.name.replace( 'encryption', '' ),
+                pwd = $( '#item-pwd-'+id ),
+                tips = $(this.parentNode).next('.t');
+            if ( val === 'none' ) {
+                pwd.hide();
+            } else {
+                pwd.show();
+            }
+            if (val === 'psk2') {
+                tips.html('仅支持WPA加密方式的设备将无法连接').show();
+            }else{
+                tips.html('');
+            }
+        } );
+
+        $( '.channel' ).on( 'change', function( e ){
+            var channelVal = this.value,
+                that = this,
+                id = that.name.replace( 'channel', '' ),
+                $bandwidth = $( '#bandwidth'+id ),
+                $itemBandwidth = $( '#itemBandwidth'+id ),
+                pddk,
+                item,
+                autoVal,
+                autoText;
+
+            if ( channelVal === '0' ) {
+                $itemBandwidth.hide();
+                return;
+            }
+
+            pddk = $.parseJSON( global.wifi.pddk[id] );
+            item = '';
+            autoVal;
+            autoText;
+
+            for ( i in pddk[channelVal] ) {
+                item += '<option value="'+i+'">'+ i +'M</option>';
+                autoVal = i;
+                autoText = i + 'M';
+            }
+            $bandwidth.html( item ).val( autoVal );
+            $itemBandwidth
+                .find( '.dummy' )
+                .text(autoText);
+            $itemBandwidth.show();
+
+            var channelIsBad = /36|40|44|48|52|56|60|64/.test( channelVal ),
+                oldChannel = global.oldConfig['channel'+id],
+                oldBandwidth = global.oldConfig['bandwidth'+id];
+
+            if ( channelIsBad && channelVal !== oldChannel ) {
+                $.dialog({
+                    width: 400,
+                    padding: '40px',
+                    title: '<%:信道选择%>',
+                    content: '<%:你手工选择的当前信道有可能造成部分机型较旧的设备无法连接，确认修改？%>',
+                    okValue: '<%:确认%>',
+                    cancelValue: '<%:取消%>',
+                    ok: function(){
+                        this.close();
+                    },
+                    cancel: function(){
+                        $( that ).val( oldChannel );
+                        var elchannelindex = that.selectedIndex;
+                        $( that ).next( '.dummy' )
+                            .text( that.options[elchannelindex].text );
+
+                        $bandwidth.val( oldBandwidth );
+                        var elbdwtindex = $bandwidth[0].selectedIndex;
+                        $bandwidth.next( '.dummy' )
+                            .text( $bandwidth[0].options[elbdwtindex].text );
+                        if( oldChannel === '0' ) {
+                            $itemBandwidth.hide();
+                        }
+                    }
+                }).lock();
+            }
+        });
+    });
+
+
+    $.sub( 'wifi:open', function( evt, data ){
+        var order = data.device_order,
+            form = ['#wifi24','#wifi50'][( order - 1 )],
+            btn = $( '.btn-wifi-st' )[( order - 1 )],
+            input = $( 'input[name=on' + order + ']' );
+
+        $( form ).find( '.group-set' ).show();
+        $( btn ).removeClass( 'btn-switch-off' ).addClass( 'btn-switch-on' );
+        input.val( '1' );
+    } );
+
+    $.sub( 'wifi:close', function( evt, data ){
+        var order = data.device_order,
+            form = ['#wifi24','#wifi50'][( order - 1 )],
+            btn = $( '.btn-wifi-st' )[( order - 1 )],
+            input = $( 'input[name=on' + order + ']' );
+
+        $( form ).find( '.group-set' ).hide();
+        $( btn ).removeClass( 'btn-switch-on' ).addClass( 'btn-switch-off' );
+        input.val( '0' );
+    } );
+
+    $.sub( 'wifi:success', function( evt, data ){
+        if ( global.wifi.isWifiConn === 0 ) {
+            $.loadingDialog({
+                title : '<%:修改 Wi-Fi 设置%>',
+                content : '<%:设置成功正在重启，需要30秒请等待...%>',
+                cancel: false
+            }).lock().time( 30*1000 );
+            setTimeout( function(){
+                window.location.reload( true );
+            }, 30*1000 );
+            return;
+        }
+        var dlg = $.loadingDialog({
+            title : '<%:修改 Wi-Fi 设置%>',
+            content : '<%:正在设置 Wi-Fi%>',
+            beforeunload : function(){
+                window.top.location.reload( true );
+            }
+        }).lock().time( 30*1000 );
+
+        setTimeout( function(){
+            dlg.content( '<%:当前连接中断%>' );
+            setTimeout( function(){
+                dlg.content( '<%:请稍后手动连接%>' );
+            }, 3000 );
+        }, 3000 );
+    } );
+
+    $.sub( 'wifi:confirm', function( evt, data ){
+        var ok = data.ok || function(){},
+            cancel = data.cancel || function(){};
+
+        $.dialog({
+            id : "confirm",
+            width: 400,
+            padding: '40px',
+            title : "<%:修改Wi-Fi设置%>",
+            content : '<%:该操作将重启 Wi-Fi 并导致 Wi-Fi 下的所有设备失去连接，是否确认修改？%>',
+            ok: function(){
+                ok();
+            },
+            cancel: function () {
+                cancel();
+            }
+        }).lock();
+    } );
+
+    $.sub( 'wifi:modify', function( evt, data ){
+        var requestDate =  data.requestDate;
+        var url = data.url;
+        $.ajax({
+            url: url,
+            dataType: 'json',
+            timeout: 5000,
+            type: "POST",
+            data: requestDate,
+            success: function( rsp ) {
+                if( rsp.code === 0 ){
+                    $.pub( 'wifi:success' );
+                } else {
+                    if ( rsp.code !== 401) {
+                        var msg = StringH.encode4Html( rsp.msg );
+                        $.alert( msg );
+                    }
+                }
+                $.pub( 'wifi:done' );
+            },
+            error: function() {
+                $.pub( 'wifi:done' );
+                $.alert( '<%:网络异常，请检查是否联网%>' );
+            }
+        });
+    });
+
+    $.sub( 'wifi:txpwr', function( evt, data ){
+        var txpwr = '<%=wifiTxpwr%>',
+            setTxpwr = function( root , data ){
+                var that = root,
+                    requestData = data,
+                    requestURL = '<%=luci.dispatcher.build_url("api", "xqnetwork","set_wifi_txpwr")%>';
+
+                return function(){
+                    $.getJSON( requestURL, requestData, function( rsp ){
+                        if ( rsp.code === 0 ) {
+                            $.loadingDialog({
+                                title: '<%:Wi-Fi 信号强度设置%>',
+                                content : '<%:设置已经生效，等待30秒后 Wi-Fi 重启。%>'
+                            }).lock().time( 30*1000 );
+
+                            setTimeout(function(){
+                                window.location.reload( 1 );
+                            }, 30 * 1000);
+
+                        } else {
+                            $.alert( rsp.msg );
+                        }
+                    });
+                };
+            };
+
+        $( '#wifiSetTxpwr' ).on( 'submit', function( e ){
+            e.preventDefault();
+            var that = this,
+                requestData = {
+                    txpwr: $('#txpwr').val()
+                },
+                ok;
+
+            if ( requestData.txpwr === txpwr ) {
+                $.alert( '<%:你什么都没改变，提交什么啊%>' );
+                return;
+            }
+
+            ok = setTxpwr( that, requestData );
+
+            $.pub( 'wifi:confirm', {
+                ok : ok,
+                cancel : function(){}
+            } );
+        } );
+    } );
+
+    $(function(){
+        setTimeout( function(){
+            $.selectBeautify();
+            $.formInit();
+        }, 100 );
+        $.pub( 'wifi:init' );
+        $.pub( 'wifi:bindEvent' );
+        $.pub( 'wifi:txpwr' );
+    });
+}());
+</script>

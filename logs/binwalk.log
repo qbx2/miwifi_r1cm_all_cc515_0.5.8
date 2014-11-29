@@ -1,0 +1,186 @@
+
+DECIMAL       HEXADECIMAL     DESCRIPTION
+--------------------------------------------------------------------------------
+96            0x60            uImage header, header size: 64 bytes, header CRC: 0x2DCC505, created: Thu Sep 25 16:20:51 2014, image size: 1452079 bytes, Data Address: 0x80000000, Entry Point: 0x80000000, data CRC: 0xDC5066D7, OS: Linux, CPU: MIPS, image type: OS Kernel Image, compression type: lzma, image name: "MIPS OpenWrt Linux-2.6.36"
+160           0xA0            LZMA compressed data, properties: 0x6D, dictionary size: 8388608 bytes, uncompressed size: 4273904 bytes
+3321          0xCF9           Zlib compressed data, best compression
+4969          0x1369          Zlib compressed data, compressed
+9252          0x2424          Zlib compressed data, compressed
+20825         0x5159          Zlib compressed data, best compression
+64524         0xFC0C          Zlib compressed data, compressed
+143308        0x22FCC         Zlib compressed data, best compression
+155435        0x25F2B         Zlib compressed data, best compression
+227615        0x3791F         Zlib compressed data, compressed
+254657        0x3E2C1         Zlib compressed data, compressed
+271032        0x422B8         Zlib compressed data, best compression
+316203        0x4D32B         Zlib compressed data, best compression
+317729        0x4D921         Zlib compressed data, compressed
+329499        0x5071B         Zlib compressed data, default compression
+374483        0x5B6D3         Zlib compressed data, best compression
+383450        0x5D9DA         Zlib compressed data, default compression
+425627        0x67E9B         Zlib compressed data, default compression
+428857        0x68B39         Zlib compressed data, compressed
+442419        0x6C033         Zlib compressed data, default compression
+449262        0x6DAEE         Zlib compressed data, default compression
+453839        0x6ECCF         Zlib compressed data, best compression
+456536        0x6F758         Zlib compressed data, default compression
+470062        0x72C2E         Zlib compressed data, compressed
+480386        0x75482         Zlib compressed data, best compression
+482424        0x75C78         Zlib compressed data, best compression
+507894        0x7BFF6         Zlib compressed data, best compression
+515806        0x7DEDE         Zlib compressed data, default compression
+535197        0x82A9D         Zlib compressed data, compressed
+546555        0x856FB         Zlib compressed data, compressed
+565621        0x8A175         Zlib compressed data, compressed
+584877        0x8ECAD         Zlib compressed data, compressed
+598840        0x92338         Zlib compressed data, best compression
+654790        0x9FDC6         Zlib compressed data, compressed
+715276        0xAEA0C         Zlib compressed data, best compression
+717542        0xAF2E6         Zlib compressed data, best compression
+744122        0xB5ABA         Zlib compressed data, default compression
+763411        0xBA613         Zlib compressed data, compressed
+786504        0xC0048         Zlib compressed data, best compression
+791249        0xC12D1         Zlib compressed data, best compression
+816054        0xC73B6         Zlib compressed data, compressed
+837250        0xCC682         Zlib compressed data, compressed
+862273        0xD2841         Zlib compressed data, best compression
+870572        0xD48AC         Zlib compressed data, best compression
+945660        0xE6DFC         Zlib compressed data, compressed
+949690        0xE7DBA         Zlib compressed data, default compression
+953248        0xE8BA0         Zlib compressed data, best compression
+959335        0xEA367         Zlib compressed data, compressed
+986256        0xF0C90         Zlib compressed data, default compression
+1039144       0xFDB28         Zlib compressed data, compressed
+1070933       0x105755        Zlib compressed data, default compression
+1090088       0x10A228        Zlib compressed data, default compression
+1093234       0x10AE72        Zlib compressed data, default compression
+1098541       0x10C32D        Zlib compressed data, compressed
+1104308       0x10D9B4        Zlib compressed data, compressed
+1134390       0x114F36        Zlib compressed data, best compression
+1138678       0x115FF6        Zlib compressed data, best compression
+1149096       0x1188A8        Zlib compressed data, default compression
+1159119       0x11AFCF        Zlib compressed data, best compression
+1167361       0x11D001        Zlib compressed data, compressed
+1174528       0x11EC00        Zlib compressed data, default compression
+1175154       0x11EE72        Zlib compressed data, default compression
+1192798       0x12335E        Zlib compressed data, compressed
+1233117       0x12D0DD        Zlib compressed data, default compression
+1234758       0x12D746        Zlib compressed data, default compression
+1257993       0x133209        Zlib compressed data, default compression
+1280934       0x138BA6        Zlib compressed data, best compression
+1288132       0x13A7C4        Zlib compressed data, default compression
+1320032       0x142460        Zlib compressed data, default compression
+1330260       0x144C54        Zlib compressed data, compressed
+1342280       0x147B48        Zlib compressed data, compressed
+1383377       0x151BD1        Zlib compressed data, default compression
+1384711       0x152107        Zlib compressed data, best compression
+1403851       0x156BCB        Zlib compressed data, best compression
+1405879       0x1573B7        Zlib compressed data, default compression
+1410235       0x1584BB        Zlib compressed data, best compression
+1429857       0x15D161        Zlib compressed data, best compression
+1446917       0x161405        Zlib compressed data, best compression
+1452239       0x1628CF        Squashfs filesystem, little endian, version 4.0, compression:lzma (non-standard type definition), size: 11124477 bytes,  1840 inodes, blocksize: 262144 bytes, created: Thu Sep 25 16:20:47 2014 
+12657553      0xC12391        Zlib compressed data, default compression
+12723245      0xC2242D        Zlib compressed data, default compression
+12724824      0xC22A58        U-Boot version string, "U-Boot 1.1.3 (Sep 25 2014 - 15:09:10)"
+12756456      0xC2A5E8        uImage header, header size: 64 bytes, header CRC: 0x1A38458D, created: Thu Sep 25 16:07:21 2014, image size: 2079120 bytes, Data Address: 0x80000000, Entry Point: 0x80000000, data CRC: 0x6F4BA613, OS: Linux, CPU: MIPS, image type: OS Kernel Image, compression type: lzma, image name: "MIPS Linux-2.6.36"
+12756520      0xC2A628        LZMA compressed data, properties: 0x5D, dictionary size: 8388608 bytes, uncompressed size: 3808960 bytes
+12759397      0xC2B165        Zlib compressed data, best compression
+12772725      0xC2E575        Zlib compressed data, best compression
+12786073      0xC31999        Zlib compressed data, best compression
+12840424      0xC3EDE8        Zlib compressed data, best compression
+12866633      0xC45449        Zlib compressed data, default compression
+12932677      0xC55645        Zlib compressed data, compressed
+12936345      0xC56499        Zlib compressed data, compressed
+12982149      0xC61785        Zlib compressed data, default compression
+12983691      0xC61D8B        Zlib compressed data, compressed
+12997496      0xC65378        Zlib compressed data, best compression
+13006769      0xC677B1        Zlib compressed data, compressed
+13078205      0xC78EBD        Zlib compressed data, best compression
+13115696      0xC82130        Zlib compressed data, compressed
+13130823      0xC85C47        Zlib compressed data, default compression
+13164121      0xC8DE59        Zlib compressed data, best compression
+13164664      0xC8E078        Zlib compressed data, best compression
+13174474      0xC906CA        Zlib compressed data, best compression
+13227020      0xC9D40C        Zlib compressed data, best compression
+13237669      0xC9FDA5        Zlib compressed data, default compression
+13272383      0xCA853F        Zlib compressed data, compressed
+13288092      0xCAC29C        Zlib compressed data, default compression
+13290639      0xCACC8F        Zlib compressed data, default compression
+13309367      0xCB15B7        Zlib compressed data, default compression
+13365914      0xCBF29A        Zlib compressed data, best compression
+13379144      0xCC2648        Zlib compressed data, default compression
+13384363      0xCC3AAB        Zlib compressed data, compressed
+13413997      0xCCAE6D        Zlib compressed data, default compression
+13428416      0xCCE6C0        Zlib compressed data, default compression
+13450846      0xCD3E5E        Zlib compressed data, compressed
+13476675      0xCDA343        Zlib compressed data, best compression
+13484624      0xCDC250        Zlib compressed data, best compression
+13493074      0xCDE352        Zlib compressed data, compressed
+13512783      0xCE304F        Zlib compressed data, compressed
+13514577      0xCE3751        Zlib compressed data, compressed
+13515668      0xCE3B94        Zlib compressed data, best compression
+13517388      0xCE424C        Zlib compressed data, compressed
+13523643      0xCE5ABB        Zlib compressed data, compressed
+13524421      0xCE5DC5        Zlib compressed data, best compression
+13533217      0xCE8021        Zlib compressed data, compressed
+13609591      0xCFAA77        Zlib compressed data, best compression
+13615639      0xCFC217        Zlib compressed data, compressed
+13669259      0xD0938B        Zlib compressed data, compressed
+13674900      0xD0A994        Zlib compressed data, best compression
+13678259      0xD0B6B3        Zlib compressed data, compressed
+13688203      0xD0DD8B        Zlib compressed data, best compression
+13689671      0xD0E347        Zlib compressed data, default compression
+13697627      0xD1025B        Zlib compressed data, default compression
+13701330      0xD110D2        Zlib compressed data, default compression
+13716745      0xD14D09        Zlib compressed data, default compression
+13798014      0xD28A7E        Zlib compressed data, best compression
+13801652      0xD298B4        Zlib compressed data, best compression
+13805698      0xD2A882        Zlib compressed data, default compression
+13821004      0xD2E44C        Zlib compressed data, best compression
+13831045      0xD30B85        Zlib compressed data, compressed
+13933324      0xD49B0C        Zlib compressed data, default compression
+13950462      0xD4DDFE        Zlib compressed data, default compression
+13961758      0xD50A1E        Zlib compressed data, best compression
+13979216      0xD54E50        Zlib compressed data, best compression
+13992474      0xD5821A        Zlib compressed data, best compression
+14013033      0xD5D269        Zlib compressed data, compressed
+14023437      0xD5FB0D        Zlib compressed data, default compression
+14032672      0xD61F20        Zlib compressed data, default compression
+14043559      0xD649A7        Zlib compressed data, best compression
+14054260      0xD67374        Zlib compressed data, compressed
+14067194      0xD6A5FA        Zlib compressed data, best compression
+14075915      0xD6C80B        Zlib compressed data, best compression
+14094277      0xD70FC5        Zlib compressed data, best compression
+14095127      0xD71317        Zlib compressed data, compressed
+14118401      0xD76E01        Zlib compressed data, default compression
+14133533      0xD7A91D        Zlib compressed data, default compression
+14136192      0xD7B380        Zlib compressed data, default compression
+14136867      0xD7B623        Zlib compressed data, compressed
+14160548      0xD812A4        Zlib compressed data, default compression
+14175389      0xD84C9D        Zlib compressed data, best compression
+14246941      0xD9641D        Zlib compressed data, best compression
+14321351      0xDA86C7        Zlib compressed data, best compression
+14323750      0xDA9026        Zlib compressed data, default compression
+14324607      0xDA937F        Zlib compressed data, best compression
+14326975      0xDA9CBF        Zlib compressed data, compressed
+14386250      0xDB844A        Zlib compressed data, best compression
+14413267      0xDBEDD3        Zlib compressed data, default compression
+14413939      0xDBF073        Zlib compressed data, compressed
+14454951      0xDC90A7        Zlib compressed data, best compression
+14460993      0xDCA841        Zlib compressed data, best compression
+14484900      0xDD05A4        Zlib compressed data, compressed
+14492581      0xDD23A5        Zlib compressed data, best compression
+14502728      0xDD4B48        Zlib compressed data, compressed
+14528902      0xDDB186        compress'd data, 16 bits
+14541299      0xDDE1F3        Zlib compressed data, default compression
+14561482      0xDE30CA        Zlib compressed data, default compression
+14567974      0xDE4A26        Zlib compressed data, default compression
+14601282      0xDECC42        Zlib compressed data, default compression
+14739916      0xE0E9CC        Zlib compressed data, best compression
+14747862      0xE108D6        Zlib compressed data, compressed
+14771575      0xE16577        Zlib compressed data, default compression
+14777550      0xE17CCE        Zlib compressed data, default compression
+14785625      0xE19C59        Zlib compressed data, default compression
+14806782      0xE1EEFE        Zlib compressed data, compressed
+

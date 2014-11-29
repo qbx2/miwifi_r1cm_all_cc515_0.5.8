@@ -1,0 +1,158 @@
+#!/bin/sh
+#
+export LANG=C
+#
+. /lib/lib.scripthelper.sh
+#
+#dlog "INFO: udhcpc script args: $@, dev=$interface ip=$ip netmask=$subnet peerip=$serverid lease=$lease router=$router dns=$dns"
+op=$1
+if [ "$op" != 'bound' -a "$op" != 'renew' ]
+then
+	#echo "`date` unknow dhclient op $@, $0" >> /tmp/vtundhcp.log
+	#echo $@ >> /tmp/vtundhcp.log
+	#env >> /tmp/vtundhcp.log
+	#set >> /tmp/vtundhcp.log
+	#echo "---" >> /tmp/vtundhcp.log
+	#/sbin/ifconfig $interface down
+	exit 0
+fi
+#
+MONITORCFGFILE='/etc/wan.monitor.conf'
+#use SECUREDNSLIST from vpn dhcp to update $MONITORCFGFILE
+#
+
+#subnet=255.255.255.0
+#domain=vt.f25.me
+#interface=tap0
+#serverid=172.16.254.254
+#broadcast=172.16.254.255
+#ip=172.16.254.12
+#lease=6000
+#mask=24
+#dns='172.18.8.8 172.18.9.9'
+#router='172.16.254.254'
+#cmd: bound
+
+peergw="$router"
+if [ -z "$peergw" ]
+	then
+	if [ -z "$serverid" ]
+		then
+		dlog "ERROR: dhcp server does not offer router or serverid, contract your network administrator for help."
+		exit 1
+	else
+		peergw="$serverid"
+		dlog "WARNING: dhcp server does not offer router, use serverid $peergw as router."
+	fi
+fi
+
+/sbin/ifconfig $interface up
+
+/sbin/ifconfig $interface $ip netmask $subnet broadcast $broadcast
+if [ $? -ne 0 ]
+	then
+	dlog "ERROR: ifconfig failed: /sbin/ifconfig $interface $ip netmask $subnet broadcast $broadcast"
+	exit 1
+fi
+
+if [ ! -s /tmp/vpnclient.env ]
+	then
+	dlog "ERROR: /tmp/vpnclient.env empty or no found."
+	exit 1
+fi
+
+. /tmp/vpnclient.env
+
+if [ -z "$LOCALGW" ]
+then
+	dlog "ERROR: local gateway ip no defined."
+	exit 1
+fi
+if [ -z "$VPNSERVERIP" ]
+then
+	dlog "ERROR: vtund server ip no defined."
+	exit 1
+fi
+
+if [ -z "$VPNINTERFACE" ]
+	then
+	dlog "ERROR: VPNINTERFACE no defined."
+	exit 1
+fi
+
+if [ "$VPNINTERFACE" != "$interface" ]
+	then
+	dlog "WARNING: VPNINTERFACE $VPNINTERFACE != interface $interface"
+	exit 1
+fi
+
+if [ -z "$dns" ]
+	then
+	test "$op" = 'bound' && dlog "WARNING: dhcp server does not offer dns server, do not update SECUREDNSLIST in $MONITORCFGFILE"
+else
+	#
+	#TODO: set get network status by arrary or uci
+	#
+	test -s "$MONITORCFGFILE" && . $MONITORCFGFILE
+	if [ "$SECUREDNSLIST" != "$dns" ]
+		then
+		touch $MONITORCFGFILE 2>/dev/null
+		if [ $? -eq 0 ]
+			then
+			updatestr="SECUREDNSLIST='$dns'"
+			sed -i -e '/^SECUREDNSLIST=/d' $MONITORCFGFILE 2>/dev/null
+			echo "$updatestr" >> $MONITORCFGFILE 2>/dev/null
+			if [ $? -ne 0 ]
+				then
+				dlog "ERROR: write $updatestr to $MONITORCFGFILE failed."
+			else
+				dlog "INFO: SECUREDNSLIST $dns updated."
+			fi
+		else
+			test "$op" = 'bound' && dlog "ERROR: do not update SECUREDNSLIST for touch $MONITORCFGFILE failed: $(touch $MONITORCFGFILE 2>&1)"
+		fi
+	#else
+	#	test "$op" = 'bound' &&  dlog "INFO: SECUREDNSLIST $SECUREDNSLIST already exist."
+	fi
+fi
+if [ "$op" = 'bound' ]
+	then
+	dlog "INFO: got dhcp $op, dev=$interface ip=$ip netmask=$subnet peerip=$serverid lease=$lease router=$router dns=$dns"
+	dlog "INFO: vpn client info, LOCALGW=$LOCALGW VPNSERVERIP=$VPNSERVERIP SECUREDNSLIST=$SECUREDNSLIST"
+fi
+for oneref in $SECUREDNSLIST
+do
+	/sbin/route del -host $oneref 2>/dev/null
+	/sbin/route add -host $oneref gw $peergw 2>/dev/null
+	isok=`/sbin/route add -host $oneref gw $peergw 2>&1 | grep -c 'File exists'`
+	if [ $isok -eq 0 ]
+	then
+		dlog "ERROR: set route for vpn ref ip $oneref failed: /sbin/route add -host $oneref gw $peergw, `/sbin/route add -host $oneref gw $peergw 2>&1`"
+		exit 1
+	fi
+done
+
+/sbin/route add -host $VPNSERVERIP gw $LOCALGW 2>/dev/null
+isok=`/sbin/route add -host $VPNSERVERIP gw $LOCALGW 2>&1 | grep -c 'File exists'`
+if [ $isok -eq 0 ]
+then
+	dlog "ERROR: set route for vtund server ip $VPNSERVERIP failed: /sbin/route add -host $VPNSERVERIP gw $LOCALGW"
+	exit 1
+#else
+#	dlog "INFO: set route for vtund server ip $VPNSERVERIP ok: /sbin/route add -host $VPNSERVERIP gw $LOCALGW"
+fi
+
+cat <<EOF>/tmp/traffic.route.env
+VPNINTERFACE=$interface
+VPNGW=$peergw
+VPNPEERIP=$serverid
+LOCALGW=$LOCALGW
+VPNSERVERIP=$VPNSERVERIP
+SECUREDNSLIST='$SECUREDNSLIST'
+EOF
+if [ $? -ne 0 ]
+then
+	dlog "ERROR: save network env failed."
+	exit 1
+fi
+#

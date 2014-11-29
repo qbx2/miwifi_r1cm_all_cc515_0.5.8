@@ -1,0 +1,15 @@
+#!/bin/sh
+
+# turn off yellow and red
+gpio 1 1
+gpio 2 1
+while true
+do
+	# turn on yellow
+	/usr/bin/gpio 2 0
+	sleep 1
+
+	#trun off yellow
+	/usr/bin/gpio 2 1
+	sleep 1
+done

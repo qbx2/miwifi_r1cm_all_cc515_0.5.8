@@ -1,0 +1,124 @@
+<%
+-- ap model
+local XQFunction = require("xiaoqiang.common.XQFunction")
+local netMode = 0
+local mode = XQFunction.getNetMode()
+if mode == "lanapmode" then
+    netMode = 2
+elseif mode == "wifiapmode" then
+    netMode = 1
+end
+%>
+<div class="mod-set mod-netmode">
+    <div class="hd">
+        <h3><%:工作模式切换%></h3>
+    </div>
+    <div class="bd">
+        <p><%:在路由器工作模式和中继工作模式之间进行切换%></p>
+        <a href="#" type="submit" id="btnNetmodSwitch" class="btn btn-primary"><span><%:切换%></span></a>
+		<%if netMode == 0 then%>
+			<input type="hidden" value="0" id="currentnetmode" />
+		<%else%>
+			<input type="hidden" value="1" id="currentnetmode" />
+		<%end%>
+    </div>
+</div>
+<script type="tmpl/html" id="tmplNetMode">
+<div class="netmode-switch-dialog-cont">
+	<div class="switch-step step-select" style="display:block;">
+		<p class="tit"><%:请手工选择需要的工作模式%></p>
+		<div id="modeSelect" class="mode-select clearfix">
+			<div class="mode-option" data-mode="0">
+				<div>
+					<p><%:创建一个新的无线Wi-Fi网络%></p>
+					<img src="<%=resource%>/web/img/normal_rt.png?v=<%=ver%>" />
+				</div>
+				<span><%:路由器模式%></span>
+			</div>
+			<div class="mode-option last" data-mode="1">
+				<div>
+					<p><%:扩大已有无线Wi-Fi网络的覆盖范围%></p>
+					<img src="<%=resource%>/web/img/repeat_rt.png?v=<%=ver%>" />
+				</div>
+				<span><%:无线中继模式%></span>
+			</div>
+		</div>
+		<a id="modeSelectBtn" href="#" class="btn btn-primary btn-primary-disabled"><span><%:下一步%></span></a>
+	</div>
+	<div class="switch-step step-wds">
+        <p class="tit"><%:请选择要扩大范围的无线网络%></p>
+        <form id="wds" name="wds" class="form clearfix" action="/">
+            <div class="form-item-out toggle-element flag-is-select ssid-select-relative" id="ssidSelectDiv">
+                <div class="form-item-select">
+                    <label class="k"><%:选择网络%></label>
+                    <span class="v">
+                         <select id="ssidselect" name="ssidselect" class="beautify" style="width:161px;">
+                            <option value=""><%:正在扫描附近的无线网络%></option>
+                        </select>
+                    </span>
+                    <span class="t"></span>
+                </div>
+                <span id="btnFreshenWIFI" class="icon-freshen"></span>
+            </div>
+            <div class="form-item-out toggle-element hide">
+                <div class="form-item">
+                    <label class="k"><%:网络名称%></label>
+                    <span class="v"><input name="ssidinput" type="text" class="ipt-text" autocomplete="off"></span>
+                    <span class="t"></span>
+                </div>
+            </div>
+            <div class="form-item-out toggle-element">
+	            <div class="form-item" id="wdsWifiInputDivForSelect">
+	                <label class="k"><%:输入密码%></label>
+	                <span class="v"><input name="passwordforselect" data-type="password"  type="password" class="ipt-text" autocomplete="off"></span>
+	                <span class="t"></span>
+	            </div>
+	            <div class="form-item" id="wdsWifiInputDivForSelectWep" style="display:none;">
+	                <label class="k"><%:输入密码%></label>
+	                <span class="v"><input name="passwordforselectwep" data-type="password"  type="password" class="ipt-text" autocomplete="off"></span>
+	                <span class="t"></span>
+	            </div>
+            </div>
+            <div class="form-item-out toggle-element hide">
+	            <div class="form-item" id="wdsWifiInputDivForInput">
+	                <label class="k"><%:输入密码%></label>
+	                <span class="v"><input name="passwordforinput" data-type="password"  type="password" class="ipt-text" autocomplete="off"></span>
+	                <span class="t"></span>
+	            </div>
+            </div>
+            <p class="change-select-type"><a class="a1" href="#" id="changeSelectType"><%:手工输入网络名称%></a></p>
+            <div class="form-contral">
+                <button class="btn btn-primary btn-block" type="submit"><span><%:一键无线中继%></span></button>
+            </div>
+        </form>
+	</div>
+	<div class="switch-step step-setting">
+		<p><%:正在设置中，请稍候...%><br /><%:请不要关闭浏览器或断开路由器%></p>
+		<span class="loading"></span>
+	</div>
+	<div class="switch-step step-succ">
+		<h3><%:恭喜，小米路由器一键中继设置成功！%></h3>
+		<p class="text"><%:1. 当前无线网络名称为%>：</p>
+		<p class="center"><span id="newssid"></span></p>
+		<p class="text"><%:2. 当前小米路由器的IP地址为%>：</p>
+		<p class="center"><span id="newip"></span></p>
+		<a id="btnSucc" href="#" class="btn btn-primary"><span><%:确定%></span></a>
+	</div>
+	<div class="switch-step step-succ-repeat2normal">
+		<h3><%:恭喜，小米路由器切换为普通路由器工作模式成功！%></h3>
+		<p class="text"><%:1. 当前无线网络名称为%>：</p>
+		<p class="center"><span id="normalssid"></span></p>
+		<p class="text"><%:2. 当前小米路由器的IP地址为%>：</p>
+		<p class="center"><span id="normalip"></span></p>
+		<p class="text"><%:3. 用miwifi.com也可以访问路由器管理页面%></p>
+		<a id="btnSuccRepeat2normal" href="#" class="btn btn-primary"><span><%:确定%></span></a>
+	</div>
+	<div class="switch-step step-repeat2normal">
+		<p><%:当前工作模式切换为普通路由器会恢复为之前路由器的所有设置%> <br /><%:是否确定切换路由器的工作模式？%></p>
+		<div class="btns">
+			<a href="#" class="btn btn-primary" id="repeattonormal"><span><%:确定%></span></a>
+			<a href="#" class="btn btn-dft" id="unrepeattonormal"><span><%:取消%></span></a>
+		</div>
+	</div>
+</div>
+</script>

@@ -1,0 +1,10 @@
+#!/bin/sh
+
+mac=`iwpriv wl1 e2p 2c | grep '0x'`
+
+b1=`echo ${mac} | cut -b 12-13`
+b2=`echo ${mac} | cut -b 14-15`
+bdata set "wl0_ssid=Xiaomi_${b2}${b1}_5G"
+bdata set "wl1_ssid=Xiaomi_${b2}${b1}"
+bdata sync
+bdata commit

@@ -1,0 +1,337 @@
+<%
+-- 系统信息js
+local XQSysUtil = require "xiaoqiang.util.XQSysUtil"
+local romVersion = XQSysUtil.getRomVersion()
+local uploadUrl
+if XQSysUtil.isRecoveryModel() then
+    uploadUrl = luci.dispatcher.build_url("api", "xqsystem","upload_rom")
+else
+    uploadUrl = "/uploadfile"..luci.dispatcher.build_url("api", "xqsystem","upload_rom")
+end
+%>
+<script type="tmpl/text" id="uploadform">
+<p><%:路由器正常工作情况下建议使用系统升级检测进行升级，在当系统无法升级或需要降级到前一版本时使用手动上传rom包进行升级。%></p>
+<div class="uploadprogress" id="uploadprogress" style="display:none;">
+    <div class="progress-text">0%</div>
+    <div class="progress"><div class="value"></div></div>
+</div>
+<div class="uploadloading" id="uploadloading" style="display:none;">
+    <div class="loading-bar"></div>
+</div>
+<form class="form form-upload" name="uploadForm" id="uploadForm" method="post" enctype="multipart/form-data" >
+    <div class="item">
+        <label class="k"><%:请选择固件:%></label>
+        <span class="v">
+            <input type="file" name="image" id="image" />
+        </span>
+        <em class="t"></em>
+    </div>
+    <div class="item item-contral">
+        <button type="button" class="btn btn-block btn-primary-disabled" id="uploadFormBtn" disabled><span><%:开始升级%></span></button>
+    </div>
+</form>
+</script>
+<script>
+// upload method
+(function( $ ){
+    $.fn.ajaxUpload = function(options){
+
+        var that = this,
+            uploadbyiframe = function( options ){
+                var d = new Date().getTime(),
+                    iframeName = 'iframeUpload' + d,
+                    iframeContents,
+                    iframe = $('<iframe name="'+iframeName+'" id="'+iframeName+'" style="display: none" />');
+                $("body").append(iframe);
+
+                var form = $(that);
+                form.attr("action", options.url);
+                form.attr("method", "post");
+                form.attr("enctype", "multipart/form-data");
+                form.attr("encoding", "multipart/form-data");
+                form.attr("target", iframeName);
+                form.submit();
+
+                form.hide();
+                $('#uploadloading').show();
+                $(document.getElementById(iframeName))
+                    .load(function () {
+                        try{
+                            iframeContents = document.getElementById(iframeName).contentWindow.document.body.innerHTML;
+                            var rsp = iframeContents.match(/^\{.*?\}/);
+                            if ( rsp ) {
+                                rsp = $.parseJSON(rsp[0]);
+                                options.success(rsp);
+                            } else {
+                                options.error();
+                                form.show();
+                                $('#uploadloading').hide();
+                            }
+                        } catch( e ) {
+                            options.error();
+                            form.show();
+                            $('#uploadloading').hide();
+                        }
+                    })
+                    .error(function(){
+                        options.error();
+                        form.show();
+                        $('#uploadloading').hide();
+                    });
+                return false;
+
+            },
+            uploadbyajax = function( options ) {
+                var form = $(that);
+                var formData = new FormData( form[0] );
+                var progressBar = form.find( '.progress' );
+                var progressBar = $('#uploadprogress');
+                var progressBarVal = progressBar.find( '.progress .value' );
+                var progressBarText = progressBar.find( '.progress-text' );
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', options.url, true);
+                xhr.onload = function(e) {
+                    if ( xhr.status === 200) {
+                        var rsp = $.parseJSON(e.target.responseText);
+                        options.success(rsp);
+                    } else {
+                        options.error();
+                        form.show();
+                        progressBar.hide();
+                    }
+                };
+                xhr.onerror = function(e) {
+                    options.error();
+                    form.show();
+                    progressBar.hide();
+                };
+                xhr.upload.onprogress = function ( e ) {
+                    console.log( e, progressBar );
+                    if (e.lengthComputable) {
+                        form.hide();
+                        progressBar.show();
+                        var pct = (e.loaded / e.total) * 100;
+                        progressBarVal.css({
+                            width: pct + '%'
+                        });
+                        progressBarText.text( parseInt(pct, 10) + '%' );
+                    }
+                }
+                xhr.send(formData);  // multipart/form-data
+
+            };
+
+        if ( window.FormData ) {
+            uploadbyajax( options );
+        } else {
+            uploadbyiframe( options );
+        }
+    };
+})(jQuery);
+//check ota
+$.sub( 'upgrade:check', function() {
+    var requestData = {},
+        requestURL = '<%=luci.dispatcher.build_url("api","xqsystem","check_rom_update")%>',
+        tplChecking = '<%:当前版本{$romVersion}，{$ret}%>',
+        tplHasnew = '<%:发现新版本,升级包大小为{$size}，请立即升级。%>';
+
+    $( '#upgradeinfo' ).html( tplChecking.tmpl( {
+        romVersion: '<em class="em"><%=romVersion%></em>',
+        ret: '<%:正在检测更新，请稍候...%>'
+    } ) );
+
+    $.getJSON( requestURL, requestData, function(rsp) {
+        if(rsp.code == 0){
+            if( rsp.needUpdate == 1 ){
+                $( '#upgradeinfo' ).html( tplHasnew.tmpl( {
+                    size: '<em class="em">' + byteFormat( rsp.fileSize ) + '</em>'
+                } ) );
+                $( '.hasnewver' ).show();
+                $( '.logs' ).show();
+            } else {
+                $( '#upgradeinfo' ).html( tplChecking.tmpl( {
+                    romVersion: '<em class="em"><%=romVersion%></em>',
+                    ret: '<%:你的版本是最新的，无需升级。%>'
+                } ) );
+                $(".hasnewver").hide();
+            }
+
+            if ( rsp.changeLog && rsp.changeLog != "" ){
+                $( '#changelog' ).html( rsp.changeLog );
+            }
+        } else {
+            $( '#upgradeinfo' ).html( tplChecking.tmpl( {
+                romVersion: '<em class="em"><%=romVersion%></em>',
+                ret: '<%:检查失败，网络繁忙请刷新页面重试。%>'
+            } ) );
+        }
+    })
+});
+
+$.sub( 'upgrade:download', function() {
+
+    $( '#btnUpgread' ).on( 'click', function( e ){
+        e.preventDefault();
+        var url = $(this).attr('href');
+        var getUsb = function(){
+            return $.ajax({
+                url: '<%=luci.dispatcher.build_url("api", "xqsystem", "usbmode")%>',
+                type: 'POST',
+                dataType: 'json'
+            });
+        };
+        var dlgUpgradeConfirm = $.dialog({
+            width: 600,
+            title: '<%:系统升级%>',
+            content: '<div class="mod-downflash"><%:注意：升级将会使所有连接设备网络将会中断，升级过程中请勿断开路由器电源。%></div>',
+            ok: function() {
+                window.location.href = url;
+            },
+            cancel: function(){
+                this.close();
+            }
+        }).lock();
+    });
+});
+
+$.sub( 'upgrade:upload', function() {
+
+    function usbservice(enbale) {
+        var requestURL = '<%=luci.dispatcher.build_url("api", "xqsystem","usbservice")%>',
+            requestData = {'enable': enbale};
+
+        return $.ajax({
+            url: requestURL,
+            type: 'get',
+            dataType: 'json',
+            data: requestData
+        });
+    }
+
+    function uploadfile(mode){
+        var options = {
+            type: 'post',
+            dataType: "json",
+            url: '<%=uploadUrl%>',
+            success: function( rsp ) {
+                if ( rsp.code == 0 ) {
+                    window.location.href = '<%=luci.dispatcher.build_url("web", "syslock")%>?flashtype=upload';
+                } else {
+                    // $( '#uploadFormBtn' ).trigger( 'done' );
+                    if ( mode == 1 ) {
+                        usbservice(1);
+                    }
+                    $('#uploadprogress, #uploadloading').hide();
+                    $( '#uploadForm' ).show();
+                    $.alert( rsp.msg ).lock();
+                }
+            },
+            error: function() {
+                // $( '#uploadFormBtn' ).trigger( 'done' );
+                if ( mode == 1 ) {
+                    usbservice(1);
+                }
+                $.alert( '<%:系统错误，请重试。%>' ).lock();
+            }
+        };
+        // $( '#uploadFormBtn' ).trigger( 'wait' );
+        $( '#uploadForm' ).ajaxUpload( options );
+    }
+
+    $( 'body' ).delegate( '#image', 'change', function( e ){
+
+        $( '#uploadFormBtn' ).on( 'enable', function( e, data ) {
+            if ( data.disabled ) {
+                this.className = 'btn btn-primary-disabled btn-block';
+                this.disabled = true;
+            } else {
+                this.className = 'btn btn-primary btn-block';
+                this.disabled = false;
+            }
+        });
+
+        var image = $( '#image' );
+        var err = $( '#uploadForm .t' );
+        var item = $( '#uploadForm .item' ).eq( 0 );
+        if ( image.val() == '' ) {
+            err.html( '<%:你未选择文件，请重新选择%>' ).show();
+            item.addClass( 'item-err' );
+            $( '#uploadFormBtn' ).trigger( 'enable', {disabled: true} );
+            return false;
+        }
+        var val = image.val();
+        var ext = val.substring( val.lastIndexOf( '.' ) + 1 );
+        ext = $.trim( ext );
+        var validExt = ext == 'bin' || ext == 'BIN';
+        if ( !validExt ) {
+            err.html( '<%:文件格式错误，请重新选择%>' ).show();
+            item.addClass( 'item-err' );
+            $( '#uploadFormBtn' ).trigger( 'enable', {disabled: true} );
+            return false;
+        }
+        err.hide();
+        item.removeClass( 'item-err' );
+        $( '#uploadFormBtn' ).trigger( 'enable', {disabled: false} );
+    } );
+
+    $( '#btnUpload' ).on( 'click', function( e ) {
+        e.preventDefault();
+
+        var uploadform = $( '#uploadform' ).html();
+        $.dialog({
+            id: 'usbcheck_upload',
+            title: '<%:手动升级%>',
+            content: '<div class="mod-uploadflash">' + uploadform + '</div>'
+        }).lock();
+    });
+
+    $( 'body' ).delegate( '#uploadFormBtn', 'click', function( e ){
+        e.preventDefault();
+
+        usbservice(0).done(function( rsp ){
+            if ( rsp.code == 0 ) {
+                uploadfile(rsp.usb);
+            }
+        });
+
+        return false;
+    });
+
+    $.sub( 'uploadlog', function(){
+        // upload logs
+        $( '#btnUploadlog' ).on( 'click', function( e ){
+            e.preventDefault();
+            var requestURL = '<%=luci.dispatcher.build_url("api", "xqsystem","upload_log")%>',
+                requestData = {};
+
+            $.pub( 'wait', {id: '#btnUploadlog'} );
+
+            $.getJSON( requestURL, requestData, function( rsp ){
+                if( rsp.code===0 ){
+                    $.alert( '<%:日志上传成功%>');
+                } else {
+                    $.alert( rsp.msg );
+                }
+                $.pub( 'done', {id: '#btnUploadlog'} );
+            })
+        } );
+    } );
+
+    $.sub( 'reset', function(){
+        // reset
+        $( '#btnReset' ).on( 'click', function( e ){
+            e.preventDefault();
+            reset_window();
+        } );
+    } );
+});
+
+$(function(){
+    $.pub( 'upgrade:check' );
+    $.pub( 'upgrade:download' );
+    $.pub( 'upgrade:upload' );
+    $.pub( 'uploadlog' );
+    $.pub( 'reset' );
+});
+</script>

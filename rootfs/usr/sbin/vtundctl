@@ -1,0 +1,100 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2013 yinjiajin@xiaomi.com
+
+START=99
+DAEMON_BIN=/usr/sbin/vtund
+serverip=s1.vt.f25.me
+
+getvtpid() {
+	vtpid=`ps w | grep 'vtund' | grep 'routevt' | grep -v grep | awk '{print $1}'`
+	echo $vtpid
+}
+#
+dlog(){
+	msg="$@"
+	test -z "$msg" && return 0
+	DATE="`date`"
+	/usr/bin/logger "vtundctl($$): $msg"
+	return 0
+}
+#
+stop() {
+	curvtpid=`getvtpid`
+	if [ -n "$curvtpid" ]
+	then
+		kill "$curvtpid"
+		pcurvtpid=$curvtpid
+		for wcnt in 1 2 3 4 5 6 7 8 9 0
+		do
+			curvtpid=`getvtpid`
+			test -z "$curvtpid" && break
+			kill "$curvtpid" 2>/dev/null
+			sleep 1
+		done
+		curvtpid=`getvtpid`
+		if [ -z "$curvtpid" ]
+			then
+			dlog "INFO: vtun client $pcurvtpid stop ok."
+		else
+			kill -9 "$curvtpid" 2>/dev/null
+			dlog "ERROR: vtun client $curvtpid stop failed, KILLED."
+			return 1
+		fi
+	fi
+	return 0
+}
+
+start() {
+	stop >/dev/null 2>&1
+	oldpid=`getvtpid`
+	waitcnt=0
+	waitlimit=60
+	while [ -n "$oldpid" -a $waitcnt -le $waitlimit ]
+	do
+		let waitcnt=$waitcnt+1
+		sleep 1
+		oldpid=`getvtpid`
+		if [ -n "$oldpid" ]
+		then
+			echo "waiting for exist vtund($oldpid) exit, esp $waitcnt seconds ..."
+		else
+			echo "exist vtund exited, starting ..."
+		fi
+	done
+	if [ $waitcnt -ge $waitlimit ]
+	then
+		echo "ERROR: waiting for exist vtund($oldpid) exit timeout after $waitcnt seconds, no started."
+		return 1
+	fi
+	mkdir -p /var/log/vtund/
+	$DAEMON_BIN -f /etc/vtund.conf -p -m routevt $serverip
+	return $?
+}
+
+reload() {
+	oldpid=`getvtpid`
+	if [ -n "$oldpid" ]
+	then
+		kill -HUP "$oldpid"
+		return $?
+	else
+		start
+		return $?
+	fi
+}
+
+shutdown() {
+	oldpid=`getvtpid`
+	if [ -n "$oldpid" ]
+	then
+		kill "$oldpid"
+	fi
+}
+
+status(){
+	oldpid=`getvtpid`
+	test -n "$oldpid" && echo "vtund running pid $oldpid"
+	test -n "$oldpid" || echo "vtund no running"
+	return 0
+}
+#

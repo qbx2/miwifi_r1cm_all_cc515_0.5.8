@@ -1,0 +1,45 @@
+#!/bin/sh
+#
+export LANG=C
+#
+test "$(uname -m)" = 'mips' && exit 0
+#
+. /lib/lib.scripthelper.sh
+#
+RDRCTL='/usr/sbin/firewall.webinitrdr'
+#
+op=$1
+if [ "$op" = 'boot' ]
+	then
+	op='start'
+fi
+#
+##run in daemon
+procdaemon mute
+#
+dlog "INFO: web initial redirect monitor $op"
+#
+webinitoldstat="$(uci get xiaoqiang.common.INITTED 2>/dev/null)"
+if [ "$webinitoldstat" = 'YES' ]
+	then
+	dlog "INFO: device already initialed."
+	$RDRCTL off
+	exit $?
+else
+	dlog "INFO: device has not initialed, web redirect on."
+	$RDRCTL on
+fi
+while [ : ]
+do
+	sleep 5
+	#
+	webinitoldstat="$(uci get xiaoqiang.common.INITTED 2>/dev/null)"
+	if [ "$webinitoldstat" = 'YES' ]
+	then
+		dlog "INFO: exit for device initialed."
+		$RDRCTL off
+		exit $?
+	fi
+done
+exit 0
+#

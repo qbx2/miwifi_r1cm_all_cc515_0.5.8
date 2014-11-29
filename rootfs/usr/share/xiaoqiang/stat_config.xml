@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<root>
+    <stat_url>http://api.gorouter.info/action/c/device/</stat_url>
+    <encrypt_url>http://api.gorouter.info/action/c/security/encrypt</encrypt_url>
+    <crash_url>http://data.gorouter.info/log/crash/</crash_url>
+</root>

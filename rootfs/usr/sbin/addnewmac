@@ -1,0 +1,58 @@
+#!/usr/bin/env lua
+local posix = require("posix")
+local json = require 'json'
+
+
+function logger(loglevel,msg)
+    --[[
+         0       Emergency: system is unusable
+         1       Alert: action must be taken immediately
+         2       Critical: critical conditions
+         3       Error: error conditions
+         4       Warning: warning conditions
+         5       Notice: normal but significant condition
+         6       Informational: informational messages
+         7       Debug: debug-level messages
+    ]]
+    posix.openlog("addnewmac","np",LOG_USER)
+    posix.syslog(loglevel,msg)
+    posix.closelog()
+end
+
+
+local cmd ,newmacs,macs = "",""
+local cmd  = io.open("/data/sysapi/traffic.json","r")
+
+if cmd ~= nil then
+    newmacs = cmd:read("*a")
+    cmd:close()
+    macs = json.decode(newmacs)
+else
+	logger(5,"open file /data/sysapi/traffic.json failed!")
+end
+
+
+if macs ~= nil and macs ~= "" and type(macs) == "table" then
+    local mm = macs["arp"]
+    if mm ~= nil then
+        for k,v in pairs(mm) do
+            if type(k) == "string" then
+                local setfilter = "/usr/sbin/sysapi macfilter set 'mac="..k.."'"
+                local status = os.execute(setfilter .." 2>/dev/null")
+                if status ~= 0 then
+                    for i=3,1,-1 do
+                        status = os.execute(setfilter .." 2>/dev/null")
+                        if status == 0 then
+                            logger(5,"set new mac "..k.." succeeded! "..i)
+                            break
+                        end
+                    end
+                else
+                    logger(5,"set new mac succeeded "..k)
+                end
+            else
+                logger(5,"set new mac failed "..tostring(k))
+            end
+        end
+    end
+end

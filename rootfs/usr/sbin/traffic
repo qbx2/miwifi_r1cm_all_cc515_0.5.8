@@ -1,0 +1,4 @@
+#!/usr/bin/env lua
+local traffic = require("sysapi.traffic")
+
+traffic.main()

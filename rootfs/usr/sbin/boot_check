@@ -1,0 +1,261 @@
+#!/bin/sh /etc/rc.common
+
+#this script will run by /etc/init.d/rcS after all rc script.
+#START=99
+#STOP=99
+
+#
+#reboot if REBOOTFLAGFILE set to REBOOT=1, by another script
+REBOOTFLAGFILE='/tmp/needreboot.stat'
+
+#/etc/init.d/rcS will save all /etc/rc.d/S* exitcode into this file
+RCSTATFILE='/tmp/rc.timing'
+
+SKIPLIST='boot_check'
+
+KEYSRVLIST='boot messagingagent.sh dnsmasq network sysapihttpd'
+
+elog(){
+	tmsg="$@"
+	logger -t boot_check "boot_check[${$}]: $tmsg"
+	echo "`date` boot_check[${$}]: $tmsg" >> /dev/console
+}
+pipelog(){
+	local oneline
+	while read oneline
+	do
+		elog "$oneline"
+	done
+}
+
+find_mtd_part() {
+	local PART="$(grep "\"$1\"" /proc/mtd | awk -F: '{print $1}')"
+	local PREFIX=/dev/mtdblock
+	PART="${PART##mtd}"
+	[ -d /dev/mtdblock ] && PREFIX=/dev/mtdblock/
+	echo "${PART:+$PREFIX$PART}"
+}
+
+start() {
+	#
+	#check /etc/rc.d/S* exitcode
+	#
+	errcnt=0
+	touch /tmp/$$.bootcheck.log
+	cat $RCSTATFILE 2>/dev/null | grep 'EXITCODE=' | grep -v 'EXITCODE=0;' > /tmp/$$.bootcheck.log
+	while read oneline
+	do
+		#EXITCODE=0;ESP=0;LIMIT=10;CMD=/etc/rc.d/S99datacenter;ARG=boot;
+		match=0
+		for onesrv in $SKIPLIST
+		do
+			echo "$oneline" | grep -q "[0-9]\{1,100\}$onesrv;" && match=1&&break
+		done
+		test $match -ne 0 && continue
+
+		match=0
+		for onesrv in $KEYSRVLIST
+		do
+			echo "$oneline" | grep -q "[0-9]\{1,100\}$onesrv;" && match=1&&break
+		done
+		if [ $match -ne 0 ]
+			then
+			let errcnt=$errcnt+1
+			elog "ERROR: KEY SERVICE FAILED: $oneline"
+		else
+			logger -t boot_check "WARNING: SERVICE FAILED: $oneline"
+		fi
+	done </tmp/$$.bootcheck.log
+
+	ft_mode=`cat /proc/xiaoqiang/ft_mode`
+	ft_ret=0
+	if [ $errcnt -ne 0 ]
+		then
+		#
+		elog "ERROR: $errcnt KEY SERVICE FAILED."
+		elog "Try rebooting system to recover."
+		#
+
+                # save log to crash partition
+		cd /tmp
+		gzip messages
+		mtd_crash_log -f messages.gz
+
+		ft_ret=1
+		if [ $ft_mode -ne 1 ]
+		then
+			nvram set flag_boot_recovery=1
+			nvram commit
+			reboot
+			exit -1
+		fi
+	fi
+
+	# 备份上网信息
+	uci_wan_proto=`uci get network.wan.proto`
+	nvram set nv_wan_type=$uci_wan_proto
+	if [ "$uci_wan_proto" = "pppoe" ]; then
+		uci_pppoe_name=`uci get network.wan.username`
+		uci_pppoe_pwd=`uci get network.wan.password`
+		nvram set nv_pppoe_name=$uci_pppoe_name
+		nvram set nv_pppoe_pwd=$uci_pppoe_pwd
+	fi
+	if [ "$uci_wan_proto" = "static" ]; then
+		uci_wan_ip=`uci get network.wan.ipaddr`
+		uci_wan_gateway=`uci get network.wan.gateway`
+		uci_wan_dns=`uci get network.wan.dns`
+		uci_wan_netmask=`uci get network.wan.netmask`
+		uci_wan_dns1=`echo "$uci_wan_dns" | awk -F ' ' '{print $1}'`
+		uci_wan_dns2=`echo "$uci_wan_dns" | awk -F ' ' '{print $2}'`
+		nvram set nv_wan_ip=$uci_wan_ip
+		nvram set nv_wan_gateway=$uci_wan_gateway
+		nvram set nv_wan_dns1=$uci_wan_dns1
+		nvram set nv_wan_dns2=$uci_wan_dns2
+		nvram set nv_wan_netmask=$uci_wan_netmask
+	fi
+	nvram commit
+
+	# 如果刚升级的系统，需要发送push
+	upgrad_flag=`nvram get flag_upgrade_push`
+	# flag 1 is need push
+	if [ "$upgrad_flag" = "1" ] ; then
+		nvram unset flag_upgrade_push
+		feedPush "{\"type\":3}"
+	fi
+
+	# 检查 wifi是否正常
+	wl_count=`cat /proc/net/dev | grep wl | wc -l`
+	if [ $wl_count -ge 2 ]; then
+		elog "INFO: Wireless OK"
+	else
+		interface_info=`cat /proc/net/dev | awk '{print $1}'`
+		wl0_info=`iwpriv wl0 e2p 0`
+		wl1_info=`iwpriv wl1 e2p 0`
+		pci_info=`cat /proc/bus/pci/devices`
+		mod_info=`lsmod`
+
+		elog "INFO: no wireless available wl_count: $wl_count"
+		elog "interface_info: $interface_info"
+		elog "wl0_info: $wl0_info"
+		elog "wl1_info: $wl1_info"
+		elog "pci_info: $pci_info"
+		elog "mod_info: $mod_info"
+                # save log to crash partition
+		cd /tmp
+		gzip messages
+		mtd_crash_log -f messages.gz
+
+		try=`nvram get no_wifi_dev_times`
+		if [ "$try" = "" ]; then
+			try=1
+			nvram set no_wifi_dev_times=$try
+		else
+			try=`expr $try + 1`
+			nvram set no_wifi_dev_times=$try
+		fi
+
+		ft_ret=2
+		if [ $ft_mode -ne 1 ]
+		then
+			if [ $try -ge 2 ]; then
+				nvram set flag_boot_recovery=1
+				nvram commit
+			fi
+			reboot
+			exit -1
+		fi
+	fi
+
+	# 检查eth0 是否存在
+	cat /proc/net/dev | grep -q "eth0" > /dev/null
+	[ $? -ne 0 ] && {
+		elog "INFO: no network available /dev/$hdd"
+                # save log to crash partition
+		cd /tmp
+		gzip messages
+		mtd_crash_log -f messages.gz
+
+		ft_ret=3
+		if [ $ft_mode -ne 1 ]
+		then
+			nvram set flag_boot_recovery=1
+			nvram commit
+			reboot
+			exit -1
+		fi
+	}
+
+	# boot finished
+	gpio 1 1
+        gpio 2 1
+
+        # blue led is okay
+        gpio 3 0
+	echo 3 > /proc/xiaoqiang/boot_status
+
+	if [ $ft_mode -eq 1 ]
+	then
+		if [ $ft_ret -ne 0 ]
+		then
+			elog "INFO: boot_check failed $ft_ret"
+			dmesg > /data/usr/log/dmesg.log
+			#red led is set
+			gpio 1 0
+			gpio 2 1
+			gpio 3 1
+		fi
+	fi
+
+	#check merge reboot require
+	cat $REBOOTFLAGFILE 2>/dev/null | grep -q '^REBOOT=1'
+	if [ $? -eq 0 ]
+		then
+		#TODO: fixme
+		elog "INFO: reboot for previous script required. --- no reboot, feature disabled."
+		#sleep 1
+		#reboot
+	fi
+
+	#stat_points
+	flg_stat=`nvram get gel_restart_hard_count`
+	if [ "$flg_stat" = "1" ]; then
+		logger -t stat_points_none gel_restart_hard_count=1
+		nvram unset gel_restart_hard_count
+	fi
+
+        flg_init_pwd=`nvram get flag_init_root_pwd`
+        if [ "$flg_init_pwd" = "1" ]; then
+                init_pwd=`mkxqimage -I`
+                (echo $init_pwd; sleep 1; echo $init_pwd) | passwd root
+                nvram unset flag_init_root_pwd
+        fi
+
+	nvram set no_wifi_dev_times=0
+	nvram set flag_ota_reboot=0
+	nvram set flag_boot_success=1
+	nvram unset flag_boot_recovery
+
+	flg_ramfs=`nvram get flag_ramfs_upstat`
+	if [ "$flg_ramfs" = "1" ]; then
+		nvram unset flag_ramfs_upstat
+	fi
+	nvram commit
+
+	# daemon: monitor reset button status
+	btnd reset 30 & 2>/dev/null
+
+        if [ -f "/data/usr/log/panic.message" ]; then
+                gzip /data/usr/log/panic.message
+        fi
+        if [ -f "/data/usr/log/panic.message.gz" ]; then
+                mtd_crash_log -u "/data/usr/log/panic.message.gz"
+
+                if [ $? -eq 0 ]; then
+                        rm /data/usr/log/panic.message.gz
+                fi
+        fi
+}
+
+stop() {
+	echo "stop"
+}

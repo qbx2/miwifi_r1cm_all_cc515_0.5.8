@@ -1,0 +1,84 @@
+
+config miqos settings
+	option name 'settings'
+	option enabled 0
+	option upload 0
+	option download 0
+	option qos_ack 0
+	option qos_syn 1
+	option qos_fin 1
+	option qos_rst 1
+	option qos_icmp 1
+	option qos_small 1
+    option qos_auto 1
+
+config system param
+    option name 'param'
+    option interval 10
+    option default_mode 'general'
+    option default_group '00'
+    option burst '10k'
+
+config group 00
+	option name '00'
+	option max_grp_uplink '0'
+	option max_grp_downlink '0'
+	option min_grp_uplink '0'
+	option min_grp_downlink '0'
+	option mode 'general'
+	list mac '00'
+
+config mode general
+	option name 'general'
+	list subclass 'p1'
+	list subclass 'p2'
+	list subclass 'p3'
+	list subclass 'p4'
+	list subclass 'p5'
+
+config class p1
+	option name 'p1'
+	option rate '0.1'
+	option ceil '1.0'
+	option burst '10k'
+	option tcp_ports '37,53,123,3455'
+	option udp_ports '37,53,123,3455'
+	option tos 'Minimize-Delay'
+
+config class p2
+	option name 'p2'
+	option rate '0.2'
+	option ceil '0.98'
+	option burst '10k'
+	option tcp_ports '22,2222,3389,3478,3479,5060:5063'
+	option udp_ports '22,2222,3389,3478,3479,5060:5063'
+	option tos 'Minimize-Cost'
+
+config class p3
+	option name 'p3'
+	option rate '0.5'
+	option ceil '0.99'
+	option burst '6k'
+	option tcp_ports '80,443,8080'
+	option udp_ports ''
+	option tos 'Maximize-Reliability'
+
+
+config class p4
+	option name 'p4'
+	option rate '0.1'
+	option ceil '0.98'
+	option burst '6k'
+	option tcp_ports '110,143,220,585,993,995'
+	option udp_ports ''
+	option tos ''
+
+config class p5
+	option name 'p5'
+	option rate '0.1'
+	option ceil '0.99'
+	option burst '6k'
+	option tcp_ports ''
+	option udp_ports ''
+	option tos ''
+

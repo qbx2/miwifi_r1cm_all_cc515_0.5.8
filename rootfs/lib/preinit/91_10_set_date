@@ -1,0 +1,16 @@
+#!/bin/sh
+# Copyright (C) 2006-2010 OpenWrt.org
+# Copyright (C) 2010 Vertical Communications
+
+set_date() {
+	if [ "$(/bin/date -u +%s 2>/dev/null)" -lt "46800" ]
+		then
+		FUNNYDAY="1970-01-01 13:00:00"
+		/bin/date -s "$FUNNYDAY" 2>/dev/null && echo "fix epoch time $FUNNYDAY ok." || echo "preinit fix epoch time failed."
+	else
+		echo "funny day:"`/bin/date -u +%s 2>/dev/null`
+	fi
+}
+
+boot_hook_add preinit_main set_date
+

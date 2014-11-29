@@ -1,0 +1,45 @@
+#!/bin/sh
+#
+export LANG=C
+#
+nvram set flag_wifi_disabled=true
+nvram set flag_usb_rootdisk_enable='true'
+nvram commit
+case "$1" in
+	status)
+		echo "$(nvram get flag_tftp_bootup)"
+		exit 0
+	;;
+	start|boot|upgrade|on|auto)
+		nvram set flag_tftp_bootup='on'
+		nvram set flag_tftp_booted='false'
+		nvram set TFTP_UPGRADE="true"
+		nvram set uart_en=1
+		nvram set boot_wait=off
+		nvram commit
+		if [ "$(bdata get uart_en)" != '1' ]
+			then
+			bdata set uart_en=1 && bdata sync && bdata commit
+			if [ $? -ne 0 ]
+				then
+				echo "ERROR: bdata set uart_en=1 failed."
+			fi
+		fi
+		echo "tftp boot is on, you have to reboot and take effect."
+		exit 0
+	;;
+	off|stop)
+		nvram set flag_tftp_bootup='off'
+		nvram set boot_wait=off
+		nvram commit
+		echo "tftp boot set to off."
+		exit 0
+	;;
+	*)
+		echo "USAGE: $0 <on|off>"
+		exit 0
+	;;
+esac
+#
+exit 0
+#

@@ -1,0 +1,371 @@
+#!/usr/bin/env lua
+local posix = require "posix"
+local socket = require 'socket'
+local http = require 'socket.http'
+local json = require 'json'
+local logging = require 'logging'
+require 'logging.file'
+local logger=logging.new(function(self,level,message)
+print(level,message)
+return true
+end)
+local logger = logging.file('/data/usr/log/network.log', '')
+local network = require("xiaoqiang.util.XQNetUtil")
+local net_tools = require("net_tools")
+
+
+function logsys(loglevel,msg)
+    --[[
+         0       Emergency: system is unusable
+         1       Alert: action must be taken immediately
+         2       Critical: critical conditions
+         3       Error: error conditions
+         4       Warning: warning conditions
+         5       Notice: normal but significant condition
+         6       Informational: informational messages
+         7       Debug: debug-level messages
+    ]]
+    posix.openlog("networkdt","np",LOG_USER)
+    posix.syslog(loglevel,msg)
+    posix.closelog()
+end
+
+function getCommandResult(node,config,flag)
+    local cmdpipe,cmdresult,cresult = "","","failed"
+    for kname,command in pairs(config) do
+        --open pile
+        if flag == "file" then
+            cmdpipe = io.open(command,"r")
+        else
+            cmdpipe = io.popen(command)
+        end
+        --read content
+        if cmdpipe ~= nil and cmdpipe ~= "" then
+            cmdresult = cmdpipe:read("*a")
+            cmdpipe:close()
+        end
+        if cmdresult ~= nil and cmdresult ~= "" then
+            cresult =  cmdresult
+            cmdresult = ""
+        end
+        node[kname] = cresult
+        cresult = "failed"
+    end
+end
+
+
+function preCondition(node,precon)
+    local precmd,preresult,cdresult="","","failed"
+    for kname,command in pairs(precon) do
+        precmd = io.popen(command)
+        if precmd ~= nil then
+            preresult = precmd:read("*a")
+        end
+        if preresult ~= nil and preresult ~= "" then
+            cdresult = string.gsub(preresult,"\n","")
+            preresult = ""
+        end
+        node[kname] = cdresult
+        cdresult = "failed"
+    end
+end
+function getHttp(host,upstream)
+    local header = {
+        ["Host"] = host,
+        ["User-Agent"] = " Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; Trident/5.0)"
+    }
+    local r, httpcode, h = http.request {
+      method = "HEAD",
+      url = upstream,
+      headers = header
+    }
+    --("curl --max-filesize 1024 -k -H 'User-Agent: Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0; Trident/5.0)' -H 'HOST: "..host.."' -w '%{HTTP_CODE}' "..upstream.." -o /dev/null 2>/dev/null|head -n1")
+    return httpcode,h
+end
+
+function getTracer(ip)
+    local tracercmd,tracerresult,trresult = "","failed","failed"
+    tracercmd = io.popen("/usr/sbin/tracer -q1 -N30 -w1 -n "..ip.." 2>&1|grep -v traceroute")
+    if tracercmd ~= nil then
+        tracerresult = tracercmd:read("*a")
+        tracercmd:close()
+    end
+    if tracerresult ~= nil then
+        trresult = string.match(tracerresult,ip) and "ok" or "failed"
+    end
+    return tracerresult,trresult
+end
+
+function getTcpcheck(pip,pot)
+    local tcpresult = " failed"
+    if pip ~= nil then
+        client = socket.connect(pip, pot)
+    end
+    if client ~= nil then
+        if client:getpeername() ~= nil then
+            tcpresult = pot.." ok"
+            client:close()
+        end
+    end
+   return tcpresult
+end
+
+function getPingstatus(node,ip,flag)
+    local pingcmd,pingresult,presult="","",""
+    if ip ~= nil and ip ~= "" then
+        pingcmd = io.popen("ping -4q -W1 -c1 "..ip.." 2>&1")
+        if pingcmd ~= nil then
+            pingresult = pingcmd:read("*a")
+            pingcmd:close()
+        end
+    end
+    node[flag] = string.match(pingresult,"%d%d?%d?%%") or "100%"
+end
+function getDiskstaus()
+    local disk = {}
+    hdcmd = io.popen("df -m 2>/dev/null|awk -v S=',' -v G='G' '/dev/{Used+=$3;Available+=$4}END{print Used/1000G S Available/1000G}'")
+    if hdcmd ~= nil then
+        hd = hdcmd:read("*a")
+        hdcmd:close()
+        if hd ~= nil  then
+            diskstatus= string.gsub(hd,"\n","")
+            for v in diskstatus:gmatch("[^,]*") do
+                if v ~= nil and v ~= "" then
+                    if disk["Used"] == nil then
+                        disk["Used"] = v
+                    else
+                        disk["Available"]= v
+                    end
+                end
+            end
+        end
+    end
+    return disk
+end
+
+function uploadaction()
+    --uploadlog
+    local zipstatus,uploadstatus,delstatus="","",""
+    zipstatus = os.execute("zip -9 /tmp/network.zip /data/usr/log/network.log >/dev/null 2>/dev/null")
+    if zipstatus == 0 then
+        uploadstatus = network.uploadLogFile("/tmp/network.zip","M")
+    else
+        logsys(5,"Compress files failed!")
+    end
+    if uploadstatus then
+        delstatus = os.execute("echo > /data/usr/log/network.log 2>/dev/null")
+    else
+        logsys(5,"upload log failed!")
+    end
+end
+
+function detect(dettable,logflag)
+    local rjson = {}
+    local jsonresult = ""
+    rjson["REQINFO"] = {}
+    rjson["CHECKINFO"] = {}
+    rjson["DETAIL"] = {}
+    rjson["CONFIGURATION"] = {}
+    rjson["CHECKINFO"]["ip"] = "failed"
+    rjson["CHECKINFO"]["gw"] = "100%"
+    rjson["CHECKINFO"]["ping"] = "100%"
+    rjson["CHECKINFO"]["dns"] = "failed"
+    rjson["CHECKINFO"]["tracer"] = "failed"
+    rjson["CHECKINFO"]["tcp"] = "failed"
+    rjson["CHECKINFO"]["http"] = "failed"
+    rjson["CHECKINFO"]["disk"] = getDiskstaus()
+    local DETAIL = {
+        gateway = "ip route 2>/dev/null|grep -v metric|awk '/default/{print$3}'",
+        iptables = "iptables-save 2>/dev/null",
+        netstat = "netstat -ntlupa 2>/dev/null",
+        usermac = "bdata show 2>/dev/null 2>/dev/null",
+        userip = "curl --connect-timeout 1 -H 'User-Agent: Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 5.1; Trident/4.0; .NET CLR 2.0.50727; InfoPath.1; .NET CLR 1.1.4322)' http://216.69.252.101 2>/dev/null|head -n1",
+        romversion = "bootinfo 2>/dev/null",
+        routelist = "ip route list 2>/dev/null",
+        arplist = "arp -n 2>/dev/null",
+        wl1arp = "wl -i wl1 assoclist 2>/dev/null",
+        wl0arp = "wl -i wl0 assoclist 2>/dev/null"
+    }
+
+    local CONFITURATION = {
+        dnsmasqconf = "/var/etc/dnsmasq.conf",
+        resolvconf = "/tmp/resolv.conf",
+        resolvautoconf = "/tmp/resolv.conf.auto",
+        wanmonitorconf = "/etc/wan.monitor.conf",
+        dnsupstreamconf = "/tmp/resolv.conf.upstream"
+    }
+
+    local CHECKINFO = {
+        wanprotocal = "uci show network.wan.proto 2>/dev/null|cut -d= -f2",
+        wanlink = "et robord 0x01 0x00 2>/dev/null|awk -F':' '/port 4/{print$2}'",
+        cpu = "/usr/sbin/getstat.lua|cut -d'%' -f1",
+        memory = "free 2>/dev/null|awk '/Mem/{print substr($3/$2,0,4)}'"
+    }
+    rjson["REQINFO"]= dettable
+    preCondition(rjson["CHECKINFO"],CHECKINFO)
+    getCommandResult(rjson["DETAIL"],DETAIL)
+    local nicarp = net_tools.arp_show() or "failed"
+    if nicarp ~= nil then
+        rjson["DETAIL"]["activatearpandnic"] = nicarp
+    end
+    if rjson["CHECKINFO"]["wanlink"] == "up" then
+        if rjson["DETAIL"]["gateway"] ~= nil and rjson["DETAIL"]["gateway"] ~= "" then
+            getPingstatus(rjson["CHECKINFO"],rjson["DETAIL"]["gateway"],"gw")
+        end
+        if rjson["CHECKINFO"]["gw"] ~= "100%" then
+            local infoHOST = dettable.HOST:match("^([%w*%-*%.%w*]*):?([%d?]*)")
+            if infoHOST ~= nil then
+                local ip,resolveinfo="failed",{}
+                ip,resolvinfo = socket.dns.toip(infoHOST)
+                if ip ~= nil and type(resolveinfo) == "table" then
+                    rjson["CHECKINFO"]["ip"] = ip
+                    rjson["CHECKINFO"]["dns"] = "ok"
+                    rjson["DETAIL"]["dns"] = resolvinfo
+                end
+            end
+            local peerip,port,peeripflag = "","",nil
+                peerip,port = dettable.UPSTREAM:match("^http://([%w*%-*%.%w*]*):?([%d?]*)")
+                peeripflag = dettable.UPSTREAM:match("^http://(%d%d?%d?%.%d%d?%d?%.%d%d?%d?%.%d%d?%d?)")
+            if peerip ~= nil then
+                if port == nil or port == "" then
+                    port = 80
+                end
+            end
+
+            if peerip == nil then
+                peerip,port = dettable.UPSTREAM:match("^https://([%w*%-*%.%w*]*):?([%d?]*)")
+                peeripflag = dettable.UPSTREAM:match("^http://(%d%d?%d?%.%d%d?%d?%.%d%d?%d?%.%d%d?%d?)")
+                if peerip ~= nil then
+                    if port == nil or port == "" then
+                        port = 443
+                    end
+                end
+            end
+            if peerip ~= nil and peerip ~= "" and peeripflag  ~= nil then
+                getPingstatus(rjson["CHECKINFO"],peerip,"ping")
+                rjson["CHECKINFO"]["ip"] = peerip
+                rjson["DETAIL"]["tracer"],rjson["CHECKINFO"]["tracer"] = getTracer(peerip)
+                rjson["CHECKINFO"]["tcp"] = getTcpcheck(peerip,port)
+            else
+                getPingstatus(rjson["CHECKINFO"],rjson["CHECKINFO"]["ip"],"ping")
+                rjson["DETAIL"]["tracer"],rjson["CHECKINFO"]["tracer"] = getTracer(rjson["CHECKINFO"]["ip"])
+                rjson["CHECKINFO"]["tcp"] = getTcpcheck(rjson["CHECKINFO"]["ip"],port)
+            end
+            rjson["CHECKINFO"]["http"],rjson["DETAIL"]["http"] = getHttp(dettable.HOST,dettable.UPSTREAM)
+        end
+    end
+    getCommandResult(rjson["CONFIGURATION"],CONFITURATION,"file")
+    jsonresult = json.encode(rjson)
+    print(jsonresult)
+    if logflag ~= false and rjson["CHECKINFO"]["gw"] ~= "100%" then
+        logger:info(jsonresult)
+        uploadaction()
+    else
+        logger:info(jsonresult)
+    end
+end
+
+function main()
+    local cmdurl =""
+    local simplecheck,logpost = false,true
+    for _,v in ipairs(arg) do
+        if v == "-s" then
+            simplecheck = true
+        end
+        if v == "-n" then
+            logpost = false
+        end
+        if v ~= "-s" and v ~= "-n" and v ~= nil and v ~= "" then
+            cmdurl = v
+        end
+    end
+    if cmdurl ~= nil and cmdurl ~= "" then
+        --information from command line
+        local cmdmsg = {}
+        cmdmsg.ERROR=""
+        cmdmsg.ERRMSG=""
+        cmdmsg.ACT=""
+        cmdmsg.REQUEST=""
+        cmdmsg.UPSTREAM = cmdurl
+        cmdmsg.HOST = cmdurl:match("^https?://([%w*%-*%.%w*]*):?([%d?]*)")
+        if cmdmsg.HOST ~= nil then
+            detect(cmdmsg,logpost)
+        else
+            logsys(5,"arguments from command line error :" ..cmdurl)
+        end
+    else
+        logsys(5,"message queue event,networkdt running!")
+        local KEY = 0x123
+        local MAXSIZE = 512   -- message buffer
+        local IPC_CREAT = 512 --01000
+        local IPC_MODE = "rw-rw-rw-" --0666
+        local MSG_NOERROR = 4096 --010000 --block
+        local IPC_NOWAIT = 04000 ---nonblock
+        ---information from nginx
+        local qid,msgid,msg filesize= "","","",""
+        start = os.time()
+        while true do
+            qid = posix.msgget(KEY, IPC_CREAT, IPC_MODE)
+            local uniqmsg = {}
+            if qid ~= nil then
+                --get all queue message
+                repeat
+                    msgid,msg = posix.msgrcv(qid, MAXSIZE, 0, IPC_NOWAIT)
+                    if msgid ~= nil then
+                        local tmpmsg = loadstring("return "..string.gsub("{"..msg.."}","%;\"",",\""))
+                        if tmpmsg ~= nil and tmpmsg ~= "" then
+                            --conver function to table
+                            local message = tmpmsg()
+                            --simple uniq messages
+                            if message.UPSTREAM ~= nil and message.UPSTREAM ~= "" then
+                                uniqmsg[message.HOST] = message
+                            end
+                        end
+                    end
+                until msgid == nil
+                local filefd = io.popen("ls -l /data/usr/log/network.log 2>/dev/null|awk '{print$5}'")
+                if filefd ~= nil then
+                    local filesz = filefd:read("*a") or "0"
+                    filesize = tonumber(filesz)
+                    if filesize == nil then
+                        local tfile = io.open("/data/usr/logs/network.log","w")
+                        if tfile ~= nil then
+                            tfile:close()
+                        end
+                        filesize = 0
+                    end
+                    if filesize > 2048000 then
+                        local clstat = os.execute("echo > /data/usr/log/network.log 2>/dev/null")
+                        if clstat then
+                            filesize = 0
+                        end
+                        logsys(5,"log size larger than 20480000 bytes!")
+                    end
+                    if filesize > 1200000 then
+                        uploadaction()
+                    end
+                end
+                filefd:close()
+                if uniqmsg ~= nil then
+                    for _,v in pairs(uniqmsg) do
+                        logger:info(v)
+                        detect(v)
+                    end
+                end
+            else
+                logsys(5,"create or get queue id error!")
+            end
+            local after = os.time()
+            if after - start > 3600 then
+                --uploadaction()
+                start = os.time()
+            end
+            if after - start < 0 then
+                start = os.time()
+            end
+            posix.sleep(3)
+        end
+    end
+end
+
+main()

@@ -1,0 +1,212 @@
+#!/bin/sh
+timeout="$1"
+dolog="$2"
+ismute="$3"
+#
+. /lib/lib.scripthelper.sh
+#
+CLOCKFILE='/data/sysapi/clock.ts'
+NTPSTATUSFLAG="/tmp/ntp.status"
+NTPSTATUS=`awk -F, '{print$1}' $NTPSTATUSFLAG 2>/dev/null`
+if [ "$(/bin/date -u +%s 2>/dev/null)" -lt "0" ]; then
+	/bin/date -s "1970-01-01 13:00:00" 2>/dev/null && logger -t "ntpsetclock" "fix epoch time ok $(/bin/date -u +%s 2>/dev/null)"
+fi
+
+if [ "$NTPSTATUS" = "ok" ];then
+	echo "INFO: last ntp sync sucessed at `cat $NTPSTATUSFLAG 2>/dev/null|awk -F, '{print$2}'`"
+	#force to sync every time
+	#exit 0
+fi
+#
+lastbootsavets(){
+	local gapts
+	lastbootts="$(date -u +%s -r ${CLOCKFILE} 2>/dev/null)"
+	if [ -n "$lastbootts" ]
+		then
+		curts=$(date -u "+%s" 2>/dev/null)
+		test -z "$curts" && return 1
+		let gapts=$curts-$lastbootts
+		if [ $gapts -le 3 ]
+			then
+			return 0
+		fi
+	else
+		mkdir -p $(dirname ${CLOCKFILE})
+	fi
+	touch ${CLOCKFILE}
+	if [ $? -ne 0 ]
+		then
+		echo "ERROR: save clock $(date -u +%s)($(date)), touch ${CLOCKFILE} failed."
+		return 1
+	else
+		echo "INFO: save clock $(date -u +%s)($(date)) ok."
+	fi
+	return 0
+}
+#
+systemclock(){
+	local mute="$1"
+	#check system time
+	#
+	#Sun Nov  3 10:35:46 CST 2013
+	#1384164830
+	#
+	#cmpts='1385559956'
+	cmpts='1'
+	lastbootts="$(date -u +%s -r ${CLOCKFILE} 2>/dev/null)"
+	test -z "$lastbootts" && lastbootts="$cmpts"
+	curts=$(date -u "+%s" 2>/dev/null)
+	if [ -z "$curts" ]
+		then
+		echo "ERROR: date -u \"+%s\" failed: $(date -u "+%s" 2>&1)"
+		return 1
+	else
+		test $cmpts -ge $lastbootts && lastbootts=$cmpts
+		if [ "$curts" -lt "$lastbootts" ]
+			then
+			let fwdts=$lastbootts-$curts
+			setclock2timestamp $lastbootts
+			if [ $? -ne 0 ]
+				then
+				echo "ERROR: set temp system clock to $lastbootts failed."
+			else
+				if [ $fwdts -le 1370000000 ]
+					then
+					echo "WARNING: system clock fast-forward $fwdts seconds."
+					echo "-------: from $(timestamp2date $curts) UTC to $(timestamp2date $lastbootts) UTC"
+				fi
+			fi
+		fi
+	fi
+	return 0
+}
+#
+if [ "$1" = 'save' ]
+	then
+	lastbootsavets
+	exit $?
+fi
+#
+if [ `argmatch log` -eq 1 -a -z "$SETCLOCKLOGGING" ]
+	then
+	export SETCLOCKLOGGING='YES'
+	$0 "$@" logging 2>&1 | pipelog dlog
+	exit $?
+fi
+ntpservers="$(uci get system.ntp.server)"
+echo "$ntpservers"| grep -q "hk.pool.ntp.f25.me"
+if [ $? -eq 0 ]
+	then
+	/etc/init.d/sysntpd stop 2>/dev/null
+	if [ $? -eq 0 ]
+		then
+		echo "INFO: sysntpd stop sucessed!"
+	else
+		echo "ERROR: sysntpd stop failed!"
+	fi
+	uci set system.ntp.server="0.pool.ntp.org 1.pool.ntp.org 2.pool.ntp.org 3.pool.ntp.org 3.asia.pool.ntp.org 0.asia.pool.ntp.org 0.cn.pool.ntp.org" 2>/dev/null&&uci commit
+	if [ $? -eq 0 ]
+		then
+		echo "INFO: old ntp server list ,update ntp server sucessed!"
+	else
+		echo "ERROR: old ntp server list ,update ntp server  failed!"
+	fi
+	/etc/init.d/sysntpd start 2>/dev/null
+	if [ $? -eq 0 ]
+	then
+		echo "INFO: sysntpd start sucessed!"
+	else
+		echo "ERROR: sysntpd start failed!"
+	fi
+	ntpservers="0.pool.ntp.org 1.pool.ntp.org 2.pool.ntp.org 3.pool.ntp.org 3.asia.pool.ntp.org 0.asia.pool.ntp.org 0.cn.pool.ntp.org"
+fi
+test -z "$ntpservers" && ntpservers="0.pool.ntp.org 1.pool.ntp.org 2.pool.ntp.org 3.pool.ntp.org 3.asia.pool.ntp.org 0.asia.pool.ntp.org 0.cn.pool.ntp.org"
+#/usr/sbin/ntpd -q -n -p 0.openwrt.pool.ntp.org -p 1.openwrt.pool.ntp.org -p 2.openwrt.pool.ntp.org
+#ntpcmd="/usr/sbin/ntpd -d -N -q -n"
+#do not print debugging info
+ntpcmd="/usr/sbin/ntpd -N -q -n -4"
+for onentpsrv in $ntpservers
+do
+	ntpcmd="$ntpcmd -p $onentpsrv"
+done
+#curts="$(date -u +%s)"
+#echo "INFO: NOW TS $(date)"
+#echo "INFO: $ntpcmd"
+#
+systemclock mute
+#
+lanipwait 0
+if [ $? -ne 0 ]
+	then
+	return 1
+fi
+#
+test -z "$timeout" && timeout=15
+#/etc/init.d/sysntpd stop 2>/dev/null
+#if [ $? -eq 0 ]
+#	then
+#	echo "INFO: sysntpd stop for sync sucessed!"
+#else
+#	echo "ERROR: sysntpd stop for sync  failed!"
+#fi
+
+#sleep random seconds(0~180seconds)
+#sn=`nvram get SN 2>/dev/null` 
+#sleeptm=$((awk 'BEGIN{srand(${sn});print int(rand()*1000000)%300;}'))
+if [ "$timeout" = '88888' ]
+then
+    echo "INFO: wan up event, ntp sync called."
+    timeout=60
+    echo "INFO: delay 10 seconds befor sync."
+    sleep 10
+elif [ "$timeout" = "99999" ]; then
+    echo "INFO:  emergency ntp sync called."
+    timeout=60
+elif [ $timeout -ne "99999" ]; then
+    sleeptm=`cat /dev/urandom |head -c 30|md5sum | tr -d [0a-zA-Z- ]  2>/dev/null`
+    sleeptm=$((${sleeptm:0:8}%300))                                              
+    echo "INFO: random ntp sync called."
+    echo "sleep $sleeptm for ntpd sync"
+    sleep $sleeptm
+fi
+
+runt "$timeout" "$ntpcmd"
+synccode=$?
+#/etc/init.d/sysntpd start 2>/dev/null
+#if [ $? -eq 0 ]
+#	then
+#	echo "INFO: sysntpd start for sync sucessed!"
+#else
+#	echo "ERROR: sysntpd start for sync  failed!"
+#fi
+if [ $synccode -ne 0 ]
+	then
+	echo "WARN: ntp update failed: $ntpcmd, try htp"
+else
+	echo "INFO: ntp sync ok."
+	echo -e "ok,`date +"%Y%m%d%H%M%S"`" >$NTPSTATUSFLAG 2>/dev/null
+	if [ `argmatch disksave` -eq 1 ]
+		then
+		curts="$(date -u +%s)"
+		test -n "$curts" && lastbootsavets
+	fi
+	exit 0
+fi
+
+htphost='htp.miwifi.com'
+htpcmd="htpdate -4 -l -t -s $htphost"
+runt "$timeout" "$htpcmd"
+synccode=$?
+if [ $synccode -ne 0 ]
+then
+	echo "ERROR: htp failed... do you have a working Internet connection?"
+else
+	echo "INFO: htp sync ok."
+	echo -e "ok,`date +"%Y%m%d%H%M%S"`" >$NTPSTATUSFLAG 2>/dev/null
+	if [ `argmatch disksave` -eq 1 ]
+		then
+		curts="$(date -u +%s)"
+		test -n "$curts" && lastbootsavets
+	fi
+	exit 0
+fi

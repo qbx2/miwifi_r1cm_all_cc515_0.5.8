@@ -1,0 +1,31 @@
+        <div class="mod-upgrade">
+            <div class="hd"><h3><%:升级检测%></h3></div>
+            <div class="bd">
+                <h4><%:系统版本%></h4>
+                <p id="upgradeinfo"></p>
+                <p class="hasnewver" style="display:none;"><a href="<%=luci.dispatcher.build_url("web", "syslock")%>?flashtype=download" class="btn btn-primary" id="btnUpgread"><span><%:立即升级%></span></a></p>
+                <p><a href="#" id="btnUpload" class="btn btn-dft"><span><%:手动升级%></span></a></p>
+                <div class="logs" style="display:none;">
+                    <h4><%:更新日志%></h4>
+                    <div id="changelog"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mod-uploadlog">
+            <div class="hd">
+                <h3><%:上传日志%></h3>
+            </div>
+            <div class="bd">
+                <button type="button" id="btnUploadlog" class="btn btn-primary"><span><%:上传日志%></span></button>
+            </div>
+        </div>
+
+        <div class="mod-uploadlog">
+            <div class="hd">
+                <h3><%:恢复出厂设置%></h3>
+            </div>
+            <div class="bd">
+                <button type="button" id="btnReset" class="btn btn-primary"><span><%:立即恢复%></span></button>
+            </div>
+        </div>

@@ -1,0 +1,37 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2009-2012 OpenWrt.org
+
+#/usr/sbin/webinitrdr.monitor
+
+#
+START=99zz
+#STOP=10
+
+export EXTRA_HELP="	status	Status the service"
+export EXTRA_COMMANDS="status"
+start() {
+	/usr/sbin/webinitrdr.monitor start
+	return $?
+}
+
+restart() {
+	stop
+	sleep 1
+	start
+	return $?
+}
+
+shutdown() {
+	stop
+	return $?
+}
+
+stop() {
+	/usr/sbin/webinitrdr.monitor stop
+	return $?
+}
+status() {
+	/usr/sbin/webinitrdr.monitor status
+	return $?
+}
+#

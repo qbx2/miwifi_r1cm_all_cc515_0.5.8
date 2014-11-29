@@ -1,0 +1,33 @@
+<%
+local ver = require("xiaoqiang.XQVersion").webVersion
+%>
+<%include("web/inc/head")%>
+    <title><%:小米路由器%></title>
+    <meta http-equiv="refresh" content="5; url=http://miwifi.com">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link href="<%=resource%>/web/css/bc.css?v=<%=ver%>" rel="stylesheet">
+    <link href="<%=resource%>/web/css/guide.css?v=<%=ver%>" rel="stylesheet">
+</head>
+<body>
+<div id="guide-doc">
+    <div id="guide-hd">
+        <div class="mod-guide-hd">
+            <div class="icons"><img src="<%=resource%>/web/img/bg_guide_hd.png?v=<%=ver%>" height="96"></div>
+            <p><%:你连接的路由器还未初始化%></p>
+        </div>
+    </div>
+    <div id="guide-bd">
+        <div class="mod-guide-welcome">
+            <p class="tit"><%:请稍候，会自动为你跳转到引导页面...%></p>
+            <div class="start">
+                <p class="img"><img src="<%=resource%>/web/img/rt.jpg"></p>
+                <div class="progress"></div>
+                <p class="last">如果未能跳转，请直接访问<a class="a1" href="http://miwifi.com">miwifi.com</a></p>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

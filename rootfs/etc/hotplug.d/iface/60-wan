@@ -1,0 +1,16 @@
+#!/bin/sh
+[ "$ACTION" = "ifup" ] && [ "$INTERFACE" = "wan" ] && {
+	. /lib/network/config.sh
+	ubus_call network.interface.wan status
+	json_select "route"
+	__idx=1
+	while json_is_a "$__idx" object; do
+		json_select "$((__idx++))"
+		json_get_var target "target"
+		json_get_var mask "mask"
+		json_get_var nexthop "nexthop"
+		route add -net $target/$mask gw $nexthop metric 50
+		json_select ".."
+	done
+}
+

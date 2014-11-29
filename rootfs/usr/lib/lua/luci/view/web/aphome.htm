@@ -1,0 +1,234 @@
+<%
+    local XQVersion = require "xiaoqiang.XQVersion"
+    local ver = XQVersion.webVersion
+    local XQWifiUtil = require "xiaoqiang.util.XQWifiUtil"
+    local wifi24Status = XQWifiUtil.getWifiStatus(1).up
+    local wifi50Status = XQWifiUtil.getWifiStatus(2).up
+    local remote_addr = luci.http.getenv("REMOTE_ADDR")
+    local mac = luci.sys.net.ip4mac(remote_addr)
+    local MAC = string.upper(mac)
+    local XQLanWanUtil = require "xiaoqiang.util.XQLanWanUtil"
+    local macdefault = string.upper(XQLanWanUtil.getDefaultMacAddress())
+    local XQSysUtil = require("xiaoqiang.util.XQSysUtil")
+    local hardwareVersion = XQSysUtil.getHardware()
+    local romVersion = XQSysUtil.getRomVersion()
+    local sysInfo = XQSysUtil.getSysInfo()
+    local router_name = XQSysUtil.getRouterName()
+
+    local lan = XQLanWanUtil.getLanWanInfo("lan")
+    local lanip = lan["ipv4"][1]["ip"]
+
+    local LuciNetwork = require("luci.model.network").init()
+    local aplanip = LuciNetwork:get_network("lan"):gwaddr() or ""
+    local upTime = XQSysUtil.getSysUptime()
+%>
+<%include("web/inc/head")%>
+<title><%:小米路由器%></title>
+<meta name="viewport" content="width=1200">
+<link href="<%=resource%>/web/css/bc.css?v=<%=ver%>" rel="stylesheet">
+<link href="<%=resource%>/web/css/home.css?v=<%=ver%>" rel="stylesheet">
+</head>
+<body>
+<div id="doc">
+    <%include("web/inc/header")%>
+    <div id="bd">
+        <div class="mod-apstatus">
+            <div class="inner">
+                <div class="apssid" id="ssidval"></div>
+                <div class="devices">
+                    <img src="<%=resource%>/web/img/devices.png">
+                    <p><%:终端设备%></p>
+                </div>
+                <div class="router" id="rtself">
+                    <img src="<%=resource%>/web/img/r1c.png">
+                    <p><%:本机%></p>
+                </div>
+                <div class="routerparent" id="rtparent">
+                    <img src="<%=resource%>/web/img/aprouter.png">
+                    <p><%:主路由%></p>
+                </div>
+                <div class="internet">
+                    <img src="<%=resource%>/web/img/internet.png">
+                    <p><%:互联网%></p>
+                </div>
+                <div class="wificonn">
+                    <img src="<%=resource%>/web/img/wificonn.png">
+                </div>
+                <div class="wanline"></div>
+                <div class="apsingal">
+                    <i id="apsingal" class="ico-apsingal ico-apsingal-lv1"></i>
+                    <p><%:无线中继%></p>
+                </div>
+            </div>
+        </div>
+        <div id="upgradeinfo" class="mod-has-upgrade" style="display:none;"></div>
+        <div class="mod-rtcore-data">
+            <ul class="list">
+                <li class="item clearfix">
+                    <i class="ico ico-6"></i>
+                    <b class="num han" id="signal">--</b>
+                    <span class="con"><br><%:中继质量%></span>
+                </li>
+                <li class="item clearfix">
+                    <i class="ico ico-2"></i>
+                    <b class="num" id="uptime">--</b>
+                    <span class="con"><span id="uptimeunit">--</span><br><%:稳定运行%></span>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <%include("web/inc/footer")%>
+
+</div>
+<div class="userguide" id="userguide" style="display:none">
+    <img src="<%=resource%>/web/img/userguide.png">
+    <div class="mask"></div>
+</div>
+<script type="tmpl/text" id="tmplRouterStatus">
+<div class="mod-router-status">
+    <div class="statusinfo apstatusinfo btmline">
+        <p class="img"><img src="<%=resource%>/web/img/ap.jpg"></p>
+        <p class="rtname"><%:主路由器%></p>
+        <ul class="clearfix">
+            <li><span class="k"><%:IP地址%>:</span><span class="v"><%=aplanip%></span></li>
+            <li><a target="_blank" href="http://<%=aplanip%>" title="<%=aplanip%>"><%:访问该路由器%></a></li>
+        </ul>
+    </div>
+    <div class="statusinfo apstatusinfo">
+        <p class="img"><img src="<%=resource%>/web/img/rt.jpg"></p>
+        <p class="rtname"><%:小米路由器 mini%><span>| 本机</span></p>
+        <ul class="clearfix">
+            <li><span class="k"><%:型号%>:</span><span class="v"><%=hardwareVersion%></span></li>
+            <li><span class="k"><%:系统版本%>:</span><span class="v"><%=romVersion%></span></li>
+        </ul>
+        <ul class="clearfix">
+            <li><span class="k"><%:IP地址%>:</span><span class="v"><%=lanip%></span></li>
+            <li><span class="k"><%:MAC地址%>:</span><span class="v"><%=macdefault%></span></li>
+        </ul>
+    </div>
+</div>
+</script>
+<%include("web/inc/g.js")%>
+<%include("web/inc/reboot.js")%>
+<script>
+(function(){
+    var dlgWifi,
+        dlgSpeed,
+        dlgRouterinfo,
+        dlgWait = false;
+
+    $.sub( 'addEvent', function( evt, data ){
+
+        $( '#rtparent,#rtself' ).on( 'click', function( e ){
+            e.preventDefault();
+            $.pub( 'router:info' );
+        } );
+
+    } );
+
+    $.sub( 'sysstatus', function(){
+        var upTime = parseInt('<%=upTime%>');
+        var uptime;
+        if( upTime ) {
+            uptime = $.secondToDate2( upTime );
+        } else {
+            uptime = $.secondToDate2( 0 );
+        }
+        $( '#uptime' ).html( uptime.num );
+        $( '#uptimeunit' ).html( uptime.unit );
+    } );
+
+    $.sub( 'router:info', function(){
+        dlgRouterinfo = $.dialog({
+            title:'<%:路由器%>',
+            content: $( '#tmplRouterStatus' ).html(),
+            lock: true
+        });
+    } );
+
+    $.sub( 'checkupgrade', function(){
+        var tpl = '检测到最新版本为{$v1}，点击此处立即升级 (当前版本为{$v2})',
+            requestData = {},
+            requestURL = '<%=luci.dispatcher.build_url("api","xqsystem","check_rom_update")%>'
+            v2 = '<%=romVersion%>';
+        $.getJSON( requestURL, requestData, function(rsp) {
+            if(rsp.code == 0){
+                if( rsp.needUpdate == 1 ){
+                    $( '#upgradeinfo' ).html(
+                        tpl.tmpl( {
+                            v1: rsp.version,
+                            v2: v2
+                        })
+                    ).fadeIn();
+                }
+            }
+        });
+        $( '#upgradeinfo' ).click(function( e ){
+            e.preventDefault();
+            location.href = '<%=luci.dispatcher.build_url("web","setting","upgrade")%>';
+        });
+    } );
+
+    $.sub( 'userguide', function(){
+        var needGuide = $.cookie('needguide'),
+            ht = $( document ).height();
+        if ( needGuide === '1' ) {
+            $('#userguide').css('height', ht).show();
+        }
+        $('#userguide').click(function( e ){
+            e.preventDefault();
+            $( this ).hide();
+            $.removeCookie('needguide', {
+                path: '/'
+            });
+        });
+    });
+
+    $.sub( 'wifisignel', function(){
+        var getSignelText = function( signel ){
+            signel = parseInt( signel, 10);
+            if ( isNaN( signel ) ) {
+                signel = 0;
+            }
+            if ( signel > 80) {
+                return '<%:优%>';
+            } else if ( signel > 30 ) {
+                return '<%:良%>';
+            } else {
+                return '<%:差%>';
+            }
+        };
+        $.getJSON('<%=luci.dispatcher.build_url("api", "xqnetwork", "wifiap_signal")%>', {}, function( rsp ){
+            if ( rsp.code == 0 ) {
+                $('#signal').html( getSignelText( rsp.signal ) );
+                var apsingal = document.getElementById('apsingal');
+                var apsingallv = (function( signal ){
+                    var s = parseInt( signal, 10 );
+                    if ( isNaN( s ) ) {
+                        return 1;
+                    }
+                    s = parseInt( (s / 21) , 10 ) + 1;
+                    return s;
+                })( rsp.signal );
+
+                apsingal.className = 'ico-apsingal ico-apsingal-lv' +  apsingallv;
+
+                if ( rsp.ssid != '') {
+                    $('#ssidval').text( 'SSID:' + rsp.ssid );
+                }
+            }
+        });
+    } );
+
+    $(function(){
+        $.pub( 'addEvent' );
+        $.pub( 'checkupgrade' );
+        $.pub( 'sysstatus' );
+        $.pub( 'wifisignel' );
+        $.pub( 'userguide' );
+    });
+}());
+</script>
+</body>
+</html>
