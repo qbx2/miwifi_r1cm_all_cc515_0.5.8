@@ -1,0 +1,76 @@
+usr/lib/lua/luci/view/mobile/home.htm:	<title>小米路由器</title>
+usr/lib/lua/luci/view/mobile/inc/header.htm:		<h1><img src="<%=resource%>/mobile/img/logo.png" alt="小米路由器" width="123"></h1>
+usr/lib/lua/luci/view/mobile/init/agreement.htm:	<title>小米路由器</title>
+usr/lib/lua/luci/view/mobile/init/guide.htm:	<title>小米路由器</title>
+usr/lib/lua/luci/view/mobile/init/guide.htm:			<p>小米路由器 WiFi 需要重启，请稍候...</p>
+usr/lib/lua/luci/view/mobile/init/hello.htm:	<title>小米路由器</title>
+usr/lib/lua/luci/view/mobile/init/hello.htm:				<label for="agree"><img id="agree" class="check" src="<%=resource%>/mobile/img/bg_checked.png" data-checked="checked"> <span>我已阅读并同意小米路由器</span></label><a target="_blank" href="<%=luci.dispatcher.build_url("mobile", "agreement")%>">用户协议</a></a>
+usr/lib/lua/luci/view/mobile/sysauth.htm:	<title>小米路由器</title>
+usr/lib/lua/luci/view/mobile/sysauth.htm:				<p>安装小米路由器客户端并设置</p>
+usr/lib/lua/luci/view/web/aphome.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/aphome.htm:        <p class="rtname"><%:小米路由器 mini%><span>| 本机</span></p>
+usr/lib/lua/luci/view/web/apsetting/safe.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/apsetting/upgrade.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/apsetting/wan.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/home.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/home.htm:                    <p><%:小米路由器%></p>
+usr/lib/lua/luci/view/web/inc/agreement.htm:    小米路由器系列产品（包括但不限于小米路由器硬件、操作系统、移动应用、PC客户端、MAC客户端和云服务，简称“本产品”）版权所属小米科技有限责任公司（简称“小米”或“我们”），为您提供智能的路由器软硬件服务。本协议（包括隐私政策）是您（终端用户）和“小米”之间关于小米路由器相关事项最终的、完整的且排他的协议，并取代、合并之前的当事人之间关于上述事项的讨论和协议。本协议将对您使用小米路由器的行为产生法律约束力。您已承诺和保证有权利和能力订立本协议，您使用小米路由器将视为您已经接受本协议。请您认真阅读本协议中各条款，包括免除和限制小米责任的免责条款和对用户的权利限制（未成年人审阅时应由法定监护人陪同），如果您不能接受本协议中的全部条款，请勿使用小米路由器。
+usr/lib/lua/luci/view/web/inc/agreement.htm:    您无需用户账户即可使用小米路由器。如果您想使用本产品更多功能，您需要注册小米账号并且于注册页面上提供相关的个人信息。您必须承诺和保证：
+usr/lib/lua/luci/view/web/inc/agreement.htm:    1.1.2 您使用小米路由器的行为必须合法；
+usr/lib/lua/luci/view/web/inc/agreement.htm:    请查阅我们的隐私政策，“小米路由器隐私政策”为本协议的一部分。
+usr/lib/lua/luci/view/web/inc/agreement.htm:    小米路由器系列产品（包括但不限于小米路由器硬件、操作系统、移动应用、PC客户端、MAC客户端和云服务，简称“本产品”）版权所属小米科技有限责任公司（简称“小米”或“我们”），为您提供智能的路由器软硬件服务。依据法律规定，我们将在特定情形下收集、使用、保存和披露您的个人信息。以下条款描述了我们如何收集、使用、保存和披露您的个人信息。
+usr/lib/lua/luci/view/web/inc/footer.htm:        <p>&copy; 2014 <%:小米路由器%><span>|</span><a href="http://www1.miwifi.com" target="_blank">官方网站</a><span>|</span><a href="http://weibo.com/xiaomiluyouqi" target="_blank">官方微博</a><span>|</span><a href="https://land.xiaomi.net/res/e1fdbc3/land/miwifi/wf_2dcode.jpg" target="_blank" id="wechatcode">官方微信</a><span>|</span><a href="<%=bbsUrl%>" target="_blank">用户社区</a><span>|</span><%:服务热线%>  400-100-5678<p>
+usr/lib/lua/luci/view/web/inc/footermini.htm:        <p>&copy; 2014 <%:小米路由器%><span>|</span><a href="http://www1.miwifi.com" target="_blank">官方网站</a><span>|</span><a href="http://weibo.com/xiaomiluyouqi" target="_blank">官方微博</a><span>|</span><a href="https://land.xiaomi.net/res/e1fdbc3/land/miwifi/wf_2dcode.jpg" target="_blank" id="wechatcode">官方微信</a><span>|</span><a href="<%=bbsUrl%>" target="_blank">用户社区</a><span>|</span><%:服务热线%>  400-100-5678<p>
+usr/lib/lua/luci/view/web/inc/header.htm:    local routerName = XQSysUtil.getRouterName() or translate("小米路由器")
+usr/lib/lua/luci/view/web/inc/header.htm:            <h1 id="logo"><a href="<%=homeUrl%>"><img src="<%=resource%>/web/img/logo.png?v=<%=ver%>" alt="<%:小米路由器%>"></a></h1>
+usr/lib/lua/luci/view/web/inc/netmod.htm:		<h3><%:恭喜，小米路由器一键中继设置成功！%></h3>
+usr/lib/lua/luci/view/web/inc/netmod.htm:		<p class="text"><%:2. 当前小米路由器的IP地址为%>：</p>
+usr/lib/lua/luci/view/web/inc/netmod.htm:		<h3><%:恭喜，小米路由器切换为普通路由器工作模式成功！%></h3>
+usr/lib/lua/luci/view/web/inc/netmod.htm:		<p class="text"><%:2. 当前小米路由器的IP地址为%>：</p>
+usr/lib/lua/luci/view/web/inc/reboot.js.htm:		content: '<%:是否确定重启路由器，重启将断开和小米路由器的连接。%>',
+usr/lib/lua/luci/view/web/inc/reboot.js.htm:		content: '<%:是否确定关闭路由器，操作将断开和小米路由器的连接。%>',
+usr/lib/lua/luci/view/web/inc/reboot.js.htm:		content : '<%:是否确定恢复出厂设置，并让小米路由器回到初始状态？%>',
+usr/lib/lua/luci/view/web/init/agreement.htm:    <title>小米路由器</title>
+usr/lib/lua/luci/view/web/init/agreement.htm:                <h1 id="logo"><a href="<%=homeUrl%>"><img src="<%=resource%>/web/img/logo.png" alt="<%:小米路由器%>"></a></h1>
+usr/lib/lua/luci/view/web/init/agreement.htm:            <h2><%:小米路由器系列产品用户许可使用协议%></h2>
+usr/lib/lua/luci/view/web/init/guide.htm:    <title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/init/guide.htm:            <p class="tit"><%:可以通过 %><span class="green" id="wdsip"></span> <%:访问小米路由器管理后台 。%></p>
+usr/lib/lua/luci/view/web/init/guide.htm:            'p': '<%:恭喜！小米路由器已初始化完成！%>',
+usr/lib/lua/luci/view/web/init/hello.htm:    <title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/init/hello.htm:            <p><%:欢迎使用小米路由器mini%></p>
+usr/lib/lua/luci/view/web/init/webinitrdr.htm:    <title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/recovery.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/recovery.htm:                <h1><%:小米路由器已启动安全恢复模式%></h1>
+usr/lib/lua/luci/view/web/recovery.htm:            <p><%:别担心，小米路由器很坚强，当前的安全恢复模式也可以一样正常上网！%></p>
+usr/lib/lua/luci/view/web/recovery.htm:                <p><%:但是，小米路由器在没有硬盘的情况下无法支持更多功能。%></p>
+usr/lib/lua/luci/view/web/setting/ddns.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/setting/dhcp_ip_mac.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/setting/dmz.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/setting/lannetset.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/setting/nat.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/setting/nat_dmz.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/setting/proset.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/setting/qos.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/setting/safe.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/setting/upgrade.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/setting/upgrade_manual.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/setting/upnp.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/setting/vpn.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/setting/wan.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/setting/wifi.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/sysauth.htm:    local router_name = XQSysUtil.getRouterName() or "小米路由器"
+usr/lib/lua/luci/view/web/sysauth.htm:    <title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/sysauth.htm:            <h1 class="title"><%:欢迎使用小米路由器%></h1>
+usr/lib/lua/luci/view/web/syslock.htm:<title><%:小米路由器%></title>
+usr/lib/lua/luci/view/web/syslock.htm:                <p class="loading-text"><%:小米路由器正在进行系统升级，大约需要5-8分钟...%></p>
+usr/lib/lua/luci/view/web/syslock.htm:            $( '#flashProgress .loading-text' ).html( '<%:小米路由器正在进行系统升级，大约需5-8分钟...%>' );
+usr/lib/lua/xiaoqiang/XQEquipment.lua:        ["type"] = { ["c"] = 3, ["p"] = 8, ["n"] = "小米路由器" },
+usr/lib/lua/xiaoqiang/XQEquipment.lua:        ["type"] = { ["c"] = 3, ["p"] = 9, ["n"] = "小米路由器mini" },
+usr/lib/lua/xiaoqiang/XQEquipment.lua:        ["type"] = { ["c"] = 3, ["p"] = 10, ["n"] = "小米路由器mini2" },
+usr/lib/lua/xiaoqiang/XQPushHelper.lua:                ["name"] = "小米路由器mini"
+usr/lib/lua/xiaoqiang/XQPushHelper.lua:                ["name"] = "小米路由器"
+usr/share/smartcontroller/smartcontroller.conf:	actions = [{"thirdParty": "xmrouter", "type": "normal_wifi_down", "delay": 0, "name": "小米路由器", "keyName": "关闭wifi8小时", "extra": {"duration": 28800000}}]
+usr/share/smartcontroller/smartcontroller.conf:	actions = [{"thirdParty": "xmrouter", "type": "normal_shutdown", "delay": 0, "name": "小米路由器", "keyName": "关机8小时", "extra": {"duration": 28800000}}]
+usr/share/smartcontroller/smartcontroller.conf:	actions = [{"thirdParty": "datacenter", "type": "normal_thunder", "delay": 0, "name": "小米路由器", "keyName": "暂停所有下载", "payload": {"api": 516}}]
+usr/share/smartcontroller/smartcontroller.conf:	actions = [{"thirdParty": "datacenter", "type": "normal_thunder", "delay": 0, "name": "小米路由器", "keyName": "开启所有下载", "payload": {"api": 517}}]
+

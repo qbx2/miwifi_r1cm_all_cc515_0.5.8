@@ -8,14 +8,14 @@ else
 	sys.setSysPasswordDefault()
 end
 %>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 	<!-- Meta, title, CSS, favicons, etc. -->
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 	<meta name="apple-mobile-web-app-capable" content="yes" />
 	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-	<title>小米路由器</title>
+	<title>Xiaomi Router</title>
 	<link href="<%=resource%>/mobile/css/bc.css?v=<%=ver%>" rel="stylesheet">
 	<link href="<%=resource%>/mobile/css/hello.css?v=<%=ver%>" rel="stylesheet">
 </head>
@@ -23,9 +23,9 @@ end
 	<article class="mod-hello">
 		<div class="content">
 			<p>
-				<label for="agree"><img id="agree" class="check" src="<%=resource%>/mobile/img/bg_checked.png" data-checked="checked"> <span>我已阅读并同意小米路由器</span></label><a target="_blank" href="<%=luci.dispatcher.build_url("mobile", "agreement")%>">用户协议</a></a>
+				<label for="agree"><img id="agree" class="check" src="<%=resource%>/mobile/img/bg_checked.png" data-checked="checked"> <span>I have read this Agreement and agree to the terms and conditions.</span></label><a target="_blank" href="<%=luci.dispatcher.build_url("mobile", "agreement")%>">User Agreement</a></a>
 				</p>
-			<a id="toInit" href="#" class="btn btn-primary btn-block">开始</a>
+			<a id="toInit" href="#" class="btn btn-primary btn-block">To Init</a>
 		</div>
 		<form style="display:none" id="prelogin" name="prelogin" method="post" action="<%=luci.dispatcher.build_url("mobile", "guide")%>">
 			<input type="hidden" name="username" value="admin"/>

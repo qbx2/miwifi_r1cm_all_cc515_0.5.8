@@ -13,13 +13,13 @@ if wifiInfo[1] then
 	ssid = wifiInfo[1]['ssid']
 end
 %>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 	<meta name="apple-mobile-web-app-capable" content="yes" />
 	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-	<title>小米路由器</title>
+	<title>Xiaomi Router</title>
 	<link href="<%=resource%>/mobile/css/bc.css?v=<%=ver%>" rel="stylesheet">
 </head>
 <body>
@@ -27,51 +27,51 @@ end
 	<article>
 		<div class="notice" style="display:none;"></div>
 		<div class="mod-wan-pppoe js-step js-step-1" style="display:none;">
-			<h2>请输入运营商提供的宽带账号信息</h2>
+			<h2>Please provide pppoe account information</h2>
 			<form name="ppoelogin" id="ppoelogin" action="/" class="form">
 				<div class="item">
-					<span class="v"><input id="ppoename" name="ppoename" type="text" class="text input-block" placeholder="宽带账号" ></span>
+					<span class="v"><input id="ppoename" name="ppoename" type="text" class="text input-block" placeholder="username" ></span>
 					<em class="t"></em>
 				</div>
 				<div class="item">
-					<span class="v"><input id="ppoepwd" name="ppoepwd" type="password" class="text input-block" placeholder="宽带密码"><input id="ppoepwdshow" name="ppoepwdshow" type="text" class="text input-block" placeholder="宽带密码" style="display:none;"><img class="btn-pwd-show" src="<%=resource%>/mobile/img/bg_ipt_pwd.png" width="22" height="15"></span>
+					<span class="v"><input id="ppoepwd" name="ppoepwd" type="password" class="text input-block" placeholder="password"><input id="ppoepwdshow" name="ppoepwdshow" type="text" class="text input-block" placeholder="password" style="display:none;"><img class="btn-pwd-show" src="<%=resource%>/mobile/img/bg_ipt_pwd.png" width="22" height="15"></span>
 					<em class="t"></em>
 				</div>
 				<div class="item">
-					<a href="#" id="tosetpwd" class="btn btn-link btn-block">无需拨号</a>
-					<button type="submit" class="btn btn-primary btn-block">下一步</button>
+					<a href="#" id="tosetpwd" class="btn btn-link btn-block">Don't dial</a>
+					<button type="submit" class="btn btn-primary btn-block">Next</button>
 				</div>
 			</form>
 		</div>
 
 		<div class="mod-router-pwd js-step js-step-2" style="display:none;">
-			<h2>设置WiFi名称、密码(与管理密码相同)</h2>
+			<h2>WiFi Settings, (??与管理密码相同)</h2>
 			<form id="routepwd" name="routepwd" action="/" class="form form-">
 				<div class="item">
 					<span class="v"><input name="ssid" type="text" class="text input-block"  value="<%=ssid%>" placeholder="SSID"></span>
 					<em class="t"></em>
 				</div>
 				<div class="item">
-					<span class="v"><input name="rtpwd" type="password" class="text input-block" placeholder="密码至少8位"><input name="rtpwdshow" type="text" class="text input-block" placeholder="密码至少8位" style="display:none;"><img class="btn-pwd-show" src="<%=resource%>/mobile/img/bg_ipt_pwd.png" width="22" height="15"></span>
+					<span class="v"><input name="rtpwd" type="password" class="text input-block" placeholder="Password must be at least 8 characters long"><input name="rtpwdshow" type="text" class="text input-block" placeholder="Password must be at least 8 characters long" style="display:none;"><img class="btn-pwd-show" src="<%=resource%>/mobile/img/bg_ipt_pwd.png" width="22" height="15"></span>
 					<em class="t"></em>
 				</div>
 				<div class="item">
-					<button type="submit" class="btn btn-primary btn-block">下一步</button>
+					<button type="submit" class="btn btn-primary btn-block">Next</button>
 				</div>
 			</form>
 		</div>
 
 		<div class="mod-init-ok js-step js-step-3" style="display:none;">
 			<div class="icon"><img src="<%=resource%>/mobile/img/succ.png" width="60"></div>
-			<h3>设置完成</h3>
-			<p>小米路由器 WiFi 需要重启，请稍候...</p>
+			<h3>Setup has been completed</h3>
+			<p>Please wait, Xiaomi Router is now rebooting...</p>
 			<p class="downcount"><span class="num" style="font-size:50px;color:#3399ff;">15</span>秒</p>
 		</div>
 
 		<div class="mod-init-ok js-step js-step-4" style="display:none;">
 			<div class="icon"><img src="<%=resource%>/mobile/img/succ.png" width="60"></div>
-			<h3>WiFi 重启完成</h3>
-			<p>请手动选择连接到 WiFi 网络</p>
+			<h3>WiFi has been restarted</h3>
+			<p>Please manually connect to WiFi network</p>
 			<p class="select-ssid"><b id="connSsid"></b></p>
 		</div>
 	</article>
@@ -108,7 +108,7 @@ $.subscribe('init:getWanType', function(){
 			if (rsp.wanType == 99) {
 				notice({
 					type:'error',
-					content:'你的路由器没有连接网线'
+					content:'Router is not connected to WAN'
 				});
 				return;
 			}
@@ -137,11 +137,11 @@ $.subscribe('init:eventInit', function(){
 		var frm = this.name;
 		var validator = FormValidator.checkAll(frm, [{
 			name: 'ppoename',
-			display :'账户',
+			display :'userid',
 			rules: 'required'
 		}, {
 			name: 'ppoepwd',
-			display :'密码',
+			display :'passwd',
 			rules: 'required'
 		}]);
 		if (validator) {
@@ -163,17 +163,17 @@ $.subscribe('init:eventInit', function(){
 		var frm = this.name;
 		var validator = FormValidator.checkAll(frm, [{
 			name: 'ssid',
-			display :'WIFI名称',
+			display :'WIFI SSID',
 			rules: 'required|valid_ssid|max_length[28]',
 			msg: {
-				'max_length': '名字过长，请使用短一些的名字'
+				'max_length': 'The name is too long, please use shorter one.'
 			}
 		}, {
 			name: 'rtpwd',
-			display :'密码',
+			display :'Password',
 			rules: 'required|min_length[8]|max_length[63]',
 			msg: {
-				'max_length': '密码过长，请使用短一些的密码'
+				'max_length': 'The password is too long, please use shorter one.'
 			}
 		}]);
 		if (validator) {
