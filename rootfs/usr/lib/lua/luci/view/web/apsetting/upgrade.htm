@@ -1,6 +1,6 @@
 <%
 --[[
-    Info    路由器中继系统信息
+    Info    Router System Information
 ]]--
 local ver = require("xiaoqiang.XQVersion").webVersion
 local xqlanwanutil = require "xiaoqiang.util.XQLanWanUtil"
@@ -9,7 +9,7 @@ local mac = string.upper(luci.sys.net.ip4mac(remote_addr))
 local macdefault = string.upper(xqlanwanutil.getDefaultMacAddress())
 %>
 <%include("web/inc/head")%>
-<title><%:小米路由器%></title>
+<title><%:Xiaomi Router%></title>
 <meta name="viewport" content="width=1200">
 <link href="<%=resource%>/web/css/bc.css?v=<%=ver%>" rel="stylesheet">
 <link href="<%=resource%>/web/css/upgrade.css?v=<%=ver%>" rel="stylesheet">
