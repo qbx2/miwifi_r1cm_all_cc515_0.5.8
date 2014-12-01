@@ -17,7 +17,7 @@
 
 %>
 <%include("web/inc/head")%>
-<title><%:小米路由器%></title>
+<title><%:Xiaomi Router%></title>
 <meta name="viewport" content="width=1200">
 <link href="<%=resource%>/web/css/bc.css?v=<%=ver%>" rel="stylesheet">
 <link href="<%=resource%>/web/css/home.css?v=<%=ver%>" rel="stylesheet">
@@ -27,30 +27,30 @@
     <%include("web/inc/header")%>
     <div id="bd">
         <div class="mod-rtstatus" id="netstatus">
-            <div class="errmsg">出现10个错误，请检查...</div>
+            <div class="errmsg">Some errors have occured, please check...</div>
             <div class="inner">
-                <div class="devices" id="devices" data-toggle="tooltip" data-placement="bottom" title="" data-original-title="<%:查看当前连接终端设备%>">
+                <div class="devices" id="devices" data-toggle="tooltip" data-placement="bottom" title="" data-original-title="<%:Check currently connected devices%>">
                     <img src="<%=resource%>/web/img/devices.png">
-                    <p><%:终端设备%></p>
+                    <p><%:Devices%></p>
                     <div class="count">
                         <span class="num" id="devicesCount">--</span><span class="unit"><%:台%></span>
                     </div>
                 </div>
-                <div class="router" id="btnRouterStatus" data-toggle="tooltip" data-placement="bottom" title="" data-original-title="<%:查看路由器信息%>">
+                <div class="router" id="btnRouterStatus" data-toggle="tooltip" data-placement="bottom" title="" data-original-title="<%:Check router status%>">
                     <img src="<%=resource%>/web/img/r1c.png">
-                    <p><%:小米路由器%></p>
+                    <p><%:Xiaomi Router%></p>
                 </div>
-                <div class="internet get-history-speed" data-toggle="tooltip" data-placement="bottom" title="" data-original-title="<%:查看带宽信息%>">
+                <div class="internet get-history-speed" data-toggle="tooltip" data-placement="bottom" title="" data-original-title="<%:Check internet bandwidth status%>">
                     <img src="<%=resource%>/web/img/internet.png">
-                    <p><%:互联网%></p>
-                    <div class="size"><span class="num" id="bandwidth">--</span><span class="unit">M<%:带宽%></span></div>
+                    <p><%:Internet%></p>
+                    <div class="size"><span class="num" id="bandwidth">--</span><span class="unit">M<%:bandwidth%></span></div>
                 </div>
                 <div class="lanst">
-                    <div class="item<%if (wifi24Status==0) then%> item-off<%end%>" id="stwifi24" data-toggle="tooltip" data-placement="bottom" title="" data-original-title="<%:快速设置Wi-Fi%>">
+                    <div class="item<%if (wifi24Status==0) then%> item-off<%end%>" id="stwifi24" data-toggle="tooltip" data-placement="bottom" title="" data-original-title="<%:Quick setup Wi-Fi%>">
                         <i class="circle wifiset" data-index="1">2.4G</i>
                         <div class="line"></div>
                     </div>
-                    <div class="item<%if (wifi50Status==0) then%> item-off<%end%>" id="stwifi50" data-toggle="tooltip" data-placement="bottom" title="" data-original-title="<%:快速设置Wi-Fi%>">
+                    <div class="item<%if (wifi50Status==0) then%> item-off<%end%>" id="stwifi50" data-toggle="tooltip" data-placement="bottom" title="" data-original-title="<%:Quick setup Wi-Fi%>">
                         <i class="circle wifiset" data-index="2">5G</i>
                         <div class="line"></div>
                     </div>
@@ -59,7 +59,7 @@
                         <div class="line"></div>
                     </div>
                 </div>
-                <div class="wanst get-history-speed" data-toggle="tooltip" data-placement="bottom" title="" data-original-title="<%:查看带宽信息%>">
+                <div class="wanst get-history-speed" data-toggle="tooltip" data-placement="bottom" title="" data-original-title="<%:View bandwidth status%>">
                     <div class="speed"><span class="num" id="maxSpeed">--</span><span id="maxSpeedunit">--</span></div>
                     <!-- <div class="maxspeed">2.1MB/S</div> -->
                     <div class="line"></div>
@@ -72,13 +72,13 @@
                 <li class="item clearfix">
                     <i class="ico ico-2"></i>
                     <b class="num" id="uptime">--</b>
-                    <span class="con"><span id="uptimeunit">--</span><br><%:稳定运行%></span>
+                    <span class="con"><span id="uptimeunit">--</span><br><%:Uptime%></span>
                 </li>
                 <li class="item clearfix">
                     <i class="ico ico-4"></i>
                     <b class="num" id="downloadspeed">--</b>
-                    <span class="con"><span id="downloadspeedunit">--</span><br><%:外网速度%></span>
-                    <a href="#" class="btn btn-primary" id="btnSpeedTest"><span><%:立即测速%></span></a>
+                    <span class="con"><span id="downloadspeedunit">--</span><br><%:Download Speed%></span>
+                    <a href="#" class="btn btn-primary" id="btnSpeedTest"><span><%:Measure Speed%></span></a>
                 </li>
             </ul>
         </div>
@@ -100,17 +100,17 @@
     </div>
     <div class="group-set clearfix" {if($status == 0)} style="display:none;"{/if}>
         <div class="form-item">
-            <label class="k"><%:名称%></label>
+            <label class="k"><%:Name%></label>
             <span class="v"><input type="text" name="ssid{$id}" value="{$ssid}" class="ipt-text" autocomplete="off" /></span>
             <em class="t"></em>
         </div>
         <div class="form-item-select">
-            <label class="k"><%:加密方式%></label>
+            <label class="k"><%:Encryption%></label>
             <span class="v">
                 <select name="encryption{$id}" class="beautify encryption" style="width:210px;">
-                    <option value="psk2"{if($encryption == 'psk2')} selected="selected"{/if}><%:强加密(WPA2个人版)%></option>
-                    <option value="mixed-psk"{if($encryption == 'mixed-psk')} selected="selected"{/if}><%:混合加密(WPA/WPA2个人版)%></option>
-                    <option value="none"{if($encryption == 'none')} selected="selected"{/if}><%:无加密(允许所有人连接)%></option>
+                    <option value="psk2"{if($encryption == 'psk2')} selected="selected"{/if}><%:WPA2PSK%></option>
+                    <option value="mixed-psk"{if($encryption == 'mixed-psk')} selected="selected"{/if}><%:WPAPSK/WPA2PSK%></option>
+                    <option value="none"{if($encryption == 'none')} selected="selected"{/if}><%:None%></option>
                 </select>
             </span>
             <em class="t"></em>
@@ -128,8 +128,8 @@
 <form class="form form-wifi-set" id="wifiset" name="wifiset" method="post" action="<%=luci.dispatcher.build_url("api", "xqnetwork", "set_all_wifi")%>" autocomplete="off">
     {$form}
     <div class="form-contral">
-        <button type="submit" class="btn btn-primary l" id="btnWiFiSubmit"><span><%:保存%></span></button>
-        <a href="#" class="btn btn-dft r" id="btnWiFiCancel"><span><%:取消%></span></a>
+        <button type="submit" class="btn btn-primary l" id="btnWiFiSubmit"><span><%:Save%></span></button>
+        <a href="#" class="btn btn-dft r" id="btnWiFiCancel"><span><%:Cancel%></span></a>
     </div>
 </form>
 </script>
@@ -149,10 +149,10 @@
 <script type="tmpl/text" id="tmpldevicesitem">
 <tr class="device-item">
     <td>
-        <div class="name">{$name} &nbsp;&nbsp;{if($isself)}<span class="muted">|&nbsp;<%:本机%></span>{/if}</div>
+        <div class="name">{$name} &nbsp;&nbsp;{if($isself)}<span class="muted">|&nbsp;<%:Device%></span>{/if}</div>
         <p>
-            <span class="muted"><%:已连接%>:</span>&nbsp;{$online}<br>
-            <span class="muted"><%:IP地址%>:</span>&nbsp;{$ip} &nbsp;&nbsp;<span class="muted"><%:MAC地址%>:</span>&nbsp;{$mac}
+            <span class="muted"><%:Connection%>:</span>&nbsp;{$online}<br>
+            <span class="muted"><%:IP Address%>:</span>&nbsp;{$ip} &nbsp;&nbsp;<span class="muted"><%:MAC Address%>:</span>&nbsp;{$mac}
         </p>
     </td>
     <td class="option">
@@ -165,21 +165,21 @@
     <div class="statusinfo">
         <p class="img"><img src="<%=resource%>/web/img/rt.jpg"></p>
         <p>
-            <span class="k"><%:型号%>:</span><span class="v"><%=hardwareVersion%></span>
-            <span class="k"><%:MAC地址%>:</span><span class="v"><%=macdefault%></span>
+            <span class="k"><%:Hardware Version%>:</span><span class="v"><%=hardwareVersion%></span>
+            <span class="k"><%:MAC Address%>:</span><span class="v"><%=macdefault%></span>
         </p>
         <p>
-            <span class="k"><%:系统版本%>:</span><span class="v"><%=romVersion%></span>
+            <span class="k"><%:ROM Version%>:</span><span class="v"><%=romVersion%></span>
         </p>
     </div>
     <div class="sysswitch">
         <!-- <a href="#" id="btnShutdown" class="shutdown">
             <i class="ico-shutdown"></i>
-            <%:关机%>
+            <%:Halt%>
         </a> -->
         <a href="#" id="btnReboot" class="reboot">
             <i class="ico-reboot"></i>
-            <%:重启%>
+            <%:Reboot%>
         </a>
     </div>
 </div>
@@ -205,8 +205,8 @@
                     var classname = 'mod-rtstatus';
                     if ( rsp.status !== 0 ) {
                         var msg = {
-                            '1': '<%:发现有$s个问题需要处理%>'.replace( '$s',rsp.count ),
-                            '2': '<%:上网连接失败，请立即处理%>'
+                            '1': '<%:Detected $s errors to be solved.%>'.replace( '$s',rsp.count ),
+                            '2': '<%:Failed to connect to the internet.%>'
                         };
                         classname += rsp.status == 1 ? ' net-check-warn' : ' net-check-err';
                         $errmsg.html( msg[rsp.status] );
@@ -264,7 +264,7 @@
                 }
                 console.log(wifiForm);
                 dlgWifi = $.dialog({
-                    title: '<%:Wi-Fi设置%><a class="ico-pro-set" href="<%=luci.dispatcher.build_url("web","setting","wifi")%>"></a>',
+                    title: '<%:Wi-Fi Settings%><a class="ico-pro-set" href="<%=luci.dispatcher.build_url("web","setting","wifi")%>"></a>',
                     lock: true,
                     padding: '0 20px 20px 20px',
                     content: tplfrom.tmpl({form: wifiForm.join('')})
@@ -297,12 +297,12 @@
     } );
 
     $.sub( 'wifi:wait', function(){
-        $( '#btnWiFiSubmit' ).prop( 'disabled', true ).find('span').text('<%:处理中...%>');
+        $( '#btnWiFiSubmit' ).prop( 'disabled', true ).find('span').text('<%:Processing...%>');
         $( '#wifiset input' ).prop( 'disabled', true );
     } );
 
     $.sub( 'wifi:done', function(){
-        $( '#btnWifiSubmit' ).prop( 'disabled', false ).find('span').text('<%:保存%>');
+        $( '#btnWifiSubmit' ).prop( 'disabled', false ).find('span').text('<%:Save%>');
         $( '#wifiset input' ).prop( 'disabled', false );
     } );
 
@@ -371,18 +371,18 @@
                 var id = i + 1;
                 var rulesSsid = {
                     name: 'ssid' + id,
-                    display :'<%:WIFI名称%>',
+                    display :'<%:WIFI SSID%>',
                     rules: 'required|max_length[31]|valid_ssid',
                     msg: {
-                        'max_length': '<%:名字过长，请使用短一些的名字%>'
+                        'max_length': '<%:The name is too long, please use shorter one.%>'
                     }
                 },
                 rulesPwd = {
                     name: 'pwd' + id,
-                    display :'<%:密码%>',
+                    display :'<%:Password%>',
                     rules: 'required|haschina|min_length[8]|max_length[63]',
                     msg: {
-                        'max_length': '<%:密码过长，请使用短一些的密码%>'
+                        'max_length': '<%:The password is too long, please use shorter one.%>'
                     }
                 };
                 validatorConf.push( rulesSsid );
@@ -438,8 +438,8 @@
                             dlgWifi.close();
 
                             $.loadingDialog({
-                                title : '<%:修改 Wi-Fi 设置%>',
-                                content : '<%:设置成功正在重启，需要30秒请等待...%>',
+                                title : '<%:Applying Wi-Fi Settings%>',
+                                content : '<%:The settings have been successfully applied, please wait 30 seconds...%>',
                                 cancel: false
                             }).lock().time( 30*1000 );
                             setTimeout( function(){
@@ -453,7 +453,7 @@
                     },
                     error: function() {
                         $.pub( 'wifi:done' );
-                        alert( '<%:网络异常，请检查是否联网%>' );
+                        alert( '<%:The network is currently abnormal, please check it.>' );
                     }
                 });
             }
@@ -487,7 +487,7 @@
             dlgWait = true;
             var showDevices = function( content ) {
                 $.dialog({
-                    title: '<%:终端管理%><a id="devicesRefresh" class="ico-dev-refresh" href="#"></a>',
+                    title: '<%:Device Management%><a id="devicesRefresh" class="ico-dev-refresh" href="#"></a>',
                     content: '<div id="panelDevices" class="mod-devices-list">' + content + '</div>',
                     lock: true
                 });
@@ -522,7 +522,6 @@
     } );
 
     $.sub( 'devices:refresh', function(){
-        // $( '#panelDevices' ).html( '<p style="text-align:center;"><%:刷新中，请等待...%></p>' );
         var refreshDevices = function( content ){
             $( '#panelDevices' ).html( content );
         }
@@ -556,7 +555,7 @@
                         var d_mac, d_self, d_ip, d_type, d_signal, d_option, d_signal_level, d_action, d_online, d_download, d_dld_speed, d_wan, d_lan, d_port, type_html, type_detail, d_html, d_activets, d_devices_icon,
                             // 1: lan 2: 2.5G 3:5G
                             d_type_id = 1,
-                            d_name = d_origin_name = "<%:未知%>";
+                            d_name = d_origin_name = "<%:Unknown%>";
 
                         d_mac = devices[i].mac.toUpperCase();
                         d_signal = devices[i].signal;
@@ -641,7 +640,7 @@
                     console.log( listHtml );
                     for( var key in listHtml ) {
                         var isfirst = key == '1' ? true : false,
-                            lantype = {'1':'<%:网线连网设备%>', '2':'2.4G连网设备', '3':'5G连网设备'}[key],
+                            lantype = {'1':'<%:LAN Network%>', '2':'2.4G Network', '3':'5G Network'}[key],
                             tmp = QW.StringH.tmpl( tplTable, {
                                 isfirst: isfirst,
                                 lantype: lantype,
