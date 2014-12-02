@@ -9,7 +9,7 @@ local mac = string.upper(luci.sys.net.ip4mac(remote_addr))
 local macdefault = string.upper(xqlanwanutil.getDefaultMacAddress())
 %>
 <%include("web/inc/head")%>
-<title><%:小米路由器%></title>
+<title><%:Xiaomi Router%></title>
 <meta name="viewport" content="width=1200">
 <link href="<%=resource%>/web/css/bc.css?v=<%=ver%>" rel="stylesheet">
 <link href="<%=resource%>/web/css/ddns.css?v=<%=ver%>" rel="stylesheet">
@@ -28,21 +28,21 @@ local macdefault = string.upper(xqlanwanutil.getDefaultMacAddress())
 
                 </div>
                 <div class="section">
-                    <h4><%:服务列表：%></h4>
+                    <h4><%:Service List：%></h4>
                     <table class="table">
                         <thead>
                             <tr>
-                                <th><%:主机名称%></th>
-                                <th><%:最近更新%></th>
-                                <th width="165" style="padding-left:15px;"><%:状态%></th>
-                                <th width="156" class="center"><%:操作%></th>
+                                <th><%:Hostname%></th>
+                                <th><%:Latest Update%></th>
+                                <th width="165" style="padding-left:15px;"><%:Status%></th>
+                                <th width="156" class="center"><%:Operation%></th>
                             </tr>
                         </thead>
                         <tbody id="serviceTbody">
                         </tbody>
                     </table>
                     <div class="addserver-contral">
-                        <a href="#" id="btnAddServer" class="btn btn-dft"><span><%:添加服务%></span></a>
+                        <a href="#" id="btnAddServer" class="btn btn-dft"><span><%:Add Server%></span></a>
                     </div>
                 </div>
             </div>
@@ -57,16 +57,16 @@ local macdefault = string.upper(xqlanwanutil.getDefaultMacAddress())
 <script type="tmpl/html" id="tmplService">
 <tr data-service-id="{$id}" {if($enabled == 1)}data-enabled = "1"{/if}>
     <td>{$domain}</td>
-    <td class="con">{$lastupdate}&nbsp;&nbsp;<a href="#" class="forceupdate"><%:手动更新%></a></td>
+    <td class="con">{$lastupdate}&nbsp;&nbsp;<a href="#" class="forceupdate"><%:Manual Update%></a></td>
     <td class="con">{if($enabled == 1)}<a class="btn-switch btn-switch-on close" href="#"></a>{else}<a class="btn-switch btn-switch-off open" href="#"></a>{/if}</td>
-    <td><a href="#" class="btn btn-dft edit"><span><%:编辑%></span></a><a href="#" class="btn btn-dft del"><span><%:删除%></span></a></td>
+    <td><a href="#" class="btn btn-dft edit"><span><%:Edit%></span></a><a href="#" class="btn btn-dft del"><span><%:Delete%></span></a></td>
 </tr>
 </script>
 <script type="tmpl/html" id="tmplAddServer">
 <div class="dialog-form-wrap">
     <form action="<%=luci.dispatcher.build_url("api", "xqnetwork", "add_server")%>" class="form form-ddns" name="addDdns" id="addDdns">
         <div class="form-item-select">
-            <label class="k"><%:服务提供商%></label>
+            <label class="k"><%:Server%></label>
             <span class="v">
                 <select id="servername" class="beautify" name="servername" style="width:209px;">
                     <option value="2" selected="selected"><%:花生壳（oray.com）%></option>
@@ -78,42 +78,42 @@ local macdefault = string.upper(xqlanwanutil.getDefaultMacAddress())
             <em class="t"></em>
         </div>
         <div class="form-item">
-            <label class="k"><%:用户名%></label>
+            <label class="k"><%:Username%></label>
             <span class="v">
                 <input type="text" id="username" name="username" class="ipt-text" />
             </span>
             <em class="t"></em>
         </div>
         <div class="form-item">
-            <label class="k"><%:密码%></label>
+            <label class="k"><%:Password%></label>
             <span class="v">
                 <input type="text" id="password" name="password" class="ipt-text" />
             </span>
             <em class="t"></em>
         </div>
         <div class="form-item">
-            <label class="k"><%:主机名称%></label>
+            <label class="k"><%:Hostname%></label>
             <span class="v">
                 <input type="text" id="hostname" name="hostname" class="ipt-text" />
             </span>
             <em class="t"></em>
         </div>
         <div class="form-item">
-            <label class="k"><%:状态检查%></label>
+            <label class="k"><%:Check Interval%></label>
             <span class="v">
                 <input type="text" id="checkinterval" name="checkinterval" class="ipt-text" />
             </span>
-            <em class="t" id="tipminute"><%:分钟%></em>
+            <em class="t" id="tipminute"><%:Minute(s)%></em>
         </div>
         <div class="form-item">
-            <label class="k"><%:强制更新%></label>
+            <label class="k"><%:Force Update Interval%></label>
             <span class="v">
                 <input type="text" id="forceinterval" name="forceinterval" class="ipt-text" />
             </span>
-            <em class="t" id="tiphour"><%:小时%></em>
+            <em class="t" id="tiphour"><%:Hour(s)%></em>
         </div>
         <div class="form-contral">
-            <button type="submit" class="btn btn-primary btn-block" id="addDdnsSubmit"><span><%:确定%></span></button>
+            <button type="submit" class="btn btn-primary btn-block" id="addDdnsSubmit"><span><%:Add%></span></button>
         </div>
     </form>
 </div>
@@ -123,49 +123,49 @@ local macdefault = string.upper(xqlanwanutil.getDefaultMacAddress())
     <form action="<%=luci.dispatcher.build_url("api", "xqnetwork", "ddns_edit")%>" class="form form-ddns" name="editDdns" id="editDdns">
         <input type="hidden" value="{$enabled}" id="enabled" />
         <div class="form-item">
-            <label class="k"><%:服务提供商%></label>
+            <label class="k"><%:Server%></label>
             <span class="v">
                 <input type="text" id="eservername" name="eservername" {if($id == 1)}value="<%:No-ip.com%>"{/if} {if($id == 2)}value="<%:花生壳（oray.com）%>"{/if} {if($id == 3)}value="<%:公云（3322.org）%>"{/if} {if($id == 4)}value="<%:Dyndns.com%>"{/if} class="ipt-text" data-postvalue="{$id}" disabled="disabled" />
             </span>
             <em class="t"></em>
         </div>
         <div class="form-item">
-            <label class="k"><%:用户名%></label>
+            <label class="k"><%:Username%></label>
             <span class="v">
                 <input type="text" id="eusername" name="eusername" value="{$usernametext}" class="ipt-text" />
             </span>
             <em class="t"></em>
         </div>
         <div class="form-item">
-            <label class="k"><%:密码%></label>
+            <label class="k"><%:Password%></label>
             <span class="v">
                 <input type="password" data-type="password"  value="{$passwordtext}"  id="epassword" name="epassword" class="ipt-text" />
             </span>
             <em class="t"></em>
         </div>
         <div class="form-item">
-            <label class="k"><%:主机名称%></label>
+            <label class="k"><%:Hostname%></label>
             <span class="v">
                 <input type="text" id="ehostname" name="ehostname" value="{$hostnametext}" class="ipt-text" />
             </span>
             <em class="t"></em>
         </div>
         <div class="form-item">
-            <label class="k"><%:状态检查%></label>
+            <label class="k"><%:Check Interval%></label>
             <span class="v">
                 <input type="text" id="echeckinterval" name="echeckinterval" value="{$checkintervaltext}" class="ipt-text" />
             </span>
-            <em class="t" id="tipminute"><%:分钟%></em>
+            <em class="t" id="tipminute"><%:Minute(s)%></em>
         </div>
         <div class="form-item">
-            <label class="k"><%:强制更新%></label>
+            <label class="k"><%:Force Update Interval%></label>
             <span class="v">
                 <input type="text" id="eforceinterval" name="eforceinterval" value="{$forceintervaltext}" class="ipt-text" />
             </span>
-            <em class="t" id="tiphour"><%:小时%></em>
+            <em class="t" id="tiphour"><%:Hour(s)%></em>
         </div>
         <div class="form-contral">
-            <button type="submit" class="btn btn-primary btn-block" id="editDdnsSubmit"><span><%:确定%></span></button>
+            <button type="submit" class="btn btn-primary btn-block" id="editDdnsSubmit"><span><%:Edit%></span></button>
         </div>
     </form>
 </div>
@@ -179,28 +179,28 @@ local macdefault = string.upper(xqlanwanutil.getDefaultMacAddress())
         var validator = FormValidator.checkAll(formName, [
             {
                 name: 'username',
-                display: '<%:用户名%>',
+                display: '<%:Username%>',
                 rules: 'required'
             },{
                 name: 'password',
-                display: '<%:密码%>',
+                display: '<%:Password%>',
                 rules: 'required'
             },{
                 name: 'hostname',
-                display: '<%:主机名称%>',
+                display: '<%:Hostname%>',
                 rules: 'required'
             },{
                 name: 'checkinterval',
-                display: '<%:状态检查的分钟间隔%>',
+                display: '<%:Check Interval%>',
                 rules: 'required|is_natural_no_zero'
             },{
                 name: 'forceinterval',
-                display: '<%:强制更新的小时间隔%>',
+                display: '<%:Force Update Inverval%>',
                 rules: 'required|is_natural_no_zero'
             }
         ]);
         if( validator ){
-            $('#addDdnsSubmit').addClass('btn-primary-disabled').prop('disabled', true).find('span').text('<%:保存中...%>');
+            $('#addDdnsSubmit').addClass('btn-primary-disabled').prop('disabled', true).find('span').text('<%:Saving...%>');
             var usernamevalue = $('#username').val(),
                 passwordvalue = $('#password').val(),
                 checkintervalvalue = $('#checkinterval').val(),
@@ -219,7 +219,7 @@ local macdefault = string.upper(xqlanwanutil.getDefaultMacAddress())
                         addServerDialog.close();
                         $.pub('ddns:get');
                     }else{
-                        $('#addDdnsSubmit').removeClass('btn-primary-disabled').prop('disabled', false).find('span').text('<%:添加%>');
+                        $('#addDdnsSubmit').removeClass('btn-primary-disabled').prop('disabled', false).find('span').text('<%:Add%>');
                         msg = res.msg;
                         alert(msg);
                     }
@@ -232,28 +232,28 @@ local macdefault = string.upper(xqlanwanutil.getDefaultMacAddress())
         var evalidator = FormValidator.checkAll(formName, [
             {
                 name: 'eusername',
-                display: '<%:用户名%>',
+                display: '<%:Username%>',
                 rules: 'required'
             },{
                 name: 'epassword',
-                display: '<%:密码%>',
+                display: '<%:Password%>',
                 rules: 'required'
             },{
                 name: 'ehostname',
-                display: '<%:主机名称%>',
+                display: '<%:Hostname%>',
                 rules: 'required'
             },{
                 name: 'echeckinterval',
-                display: '<%:状态检查的分钟间隔%>',
+                display: '<%:Check Interval%>',
                 rules: 'required|is_natural_no_zero'
             },{
                 name: 'eforceinterval',
-                display: '<%:强制更新的小时间隔%>',
+                display: '<%:Force Update Interval%>',
                 rules: 'required|is_natural_no_zero'
             }
         ]);
         if( evalidator ){
-            $('#editDdnsSubmit').addClass('btn-primary-disabled').prop('disabled', true).find('span').text('<%:保存中...%>');
+            $('#editDdnsSubmit').addClass('btn-primary-disabled').prop('disabled', true).find('span').text('<%:Saving...%>');
             var usernamevalue = $('#eusername').val(),
                 passwordvalue = $('#epassword').val(),
                 checkintervalvalue = $('#echeckinterval').val(),
@@ -273,7 +273,7 @@ local macdefault = string.upper(xqlanwanutil.getDefaultMacAddress())
                         editServerDialog.close();
                         $.pub('ddns:get');
                     }else{
-                        $('#editDdnsSubmit').removeClass('btn-primary-disabled').prop('disabled', false).find('span').text('<%:添加%>');
+                        $('#editDdnsSubmit').removeClass('btn-primary-disabled').prop('disabled', false).find('span').text('<%:Edit%>');
                         msg = res.msg;
                         alert(msg);
                     }
@@ -356,14 +356,14 @@ local macdefault = string.upper(xqlanwanutil.getDefaultMacAddress())
                 success: function(res){
                     if(res.code == 0){
                         $.pub('ddns:get');
-                        alert('<%:更新成功%>');
+                        alert('<%:It has been successfully updated.%>');
                     }else{
                         alert(res.msg);
                     }
                 }
             });
         }else{
-            alert('<%:未启动无法强制更新%>');
+            alert('<%:??未启动无法强制更新%>');
         }
     });
     $.sub('ddns:get', function(evt, data){
@@ -388,7 +388,7 @@ local macdefault = string.upper(xqlanwanutil.getDefaultMacAddress())
                         }
                         $('#serviceTbody').html(trarr.join(''));
                     }else{
-                        $('#serviceTbody').html('<tr><td colspan="4"><%:还没有服务添加进来%></td></tr>');
+                        $('#serviceTbody').html('<tr><td colspan="4"><%:Empty Server Entry??还没有服务添加进来%></td></tr>');
                     }
                 }
                 if(res.on == 0){
@@ -403,7 +403,7 @@ local macdefault = string.upper(xqlanwanutil.getDefaultMacAddress())
     });
     $.sub('ddns:showAddDialog', function(evt, data){
         addServerDialog = $.dialog({
-            title: '<%:添加服务%>',
+            title: '<%:Add Server%>',
             content: $('#tmplAddServer').html(),
             lock: true,
             padding: 0
@@ -435,7 +435,7 @@ local macdefault = string.upper(xqlanwanutil.getDefaultMacAddress())
                         enabled: StringH.encode4HtmlValue(res.enabled)
                     });
                     editServerDialog = $.dialog({
-                        title: '<%:编辑服务%>',
+                        title: '<%:Edit Server%>',
                         content: editServerDialogHTML,
                         lock: true,
                         padding: 0
@@ -494,7 +494,7 @@ local macdefault = string.upper(xqlanwanutil.getDefaultMacAddress())
     // 20140618150929 ==> 06/18/2014&nbsp;&nbsp;15:09
     function formatTime(str){
         if(!str){
-            return '<%:暂无更新%>';
+            return '<%:???暂无更新%>';
         }
         var format = "";
         var year = str.substr(0, 4);
